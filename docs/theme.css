@@ -1,0 +1,98 @@
+:root {
+  color-scheme: light;
+  --bg: #faf9f6;
+  --surface: #ffffff;
+  --sunk: #f1f0ec;
+  --line: #deddd6;
+  --line-strong: #c4c8c1;
+  --fg: #262a2d;
+  --muted: #626966;
+  --faint: #797f7b;
+  --center: #31686a;
+  --target: #a45c2a;
+  --pos: #b25454;
+  --neg: #4b779e;
+  --pull: #377966;
+  --push: #b25454;
+  --g-pets: #377966;
+  --g-fruit: #a45c2a;
+  --g-veh: #74639c;
+  --g-adj: #797f7b;
+  --hl: #f5edcf;
+  --hl-edge: #b9973e;
+  --ink-band: #2c3533;
+  --ink-band-fg: #f5f6f2;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #1a1d1e;
+  --surface: #232728;
+  --sunk: #2b3031;
+  --line: #3a4141;
+  --line-strong: #505a5a;
+  --fg: #e3e7e4;
+  --muted: #b1bcb6;
+  --faint: #8f9c95;
+  --center: #8fc8be;
+  --target: #ddb087;
+  --pos: #d98989;
+  --neg: #94b4d7;
+  --pull: #9bc4ad;
+  --push: #d98989;
+  --g-pets: #9bc4ad;
+  --g-fruit: #ddb087;
+  --g-veh: #bcacd6;
+  --g-adj: #8f9c95;
+  --hl: #3a3626;
+  --hl-edge: #a49456;
+  --ink-band: #131617;
+  --ink-band-fg: #e3e7e4;
+}
+
+.theme-btn {
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 6px 12px;
+  color: var(--fg);
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.theme-btn:hover { border-color: var(--center); }
+.theme-btn:focus-visible { outline: 2px solid var(--center); outline-offset: 3px; }
+
+.derivative-graph {
+  margin: 0;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  max-width: 760px;
+}
+.derivative-graph figcaption { display: flex; flex-direction: column; gap: 6px; }
+.derivative-graph figcaption p, .graph-reading { font-size: 14px; color: var(--muted); }
+.derivative-graph svg { display: block; width: 100%; height: auto; }
+.derivative-graph svg text { font-family: var(--f-body); font-size: 13px; }
+.graph-plot { min-width: 0; overflow-x: auto; }
+.graph-plot svg { min-width: 480px; }
+.graph-plot:focus-visible { outline: 2px solid var(--center); outline-offset: 2px; }
+.graph-hint { display: none; font-size: 13px; color: var(--muted); }
+.graph-key { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; color: var(--muted); }
+.graph-key span { display: inline-flex; align-items: center; gap: 6px; }
+.graph-key i { width: 20px; border-top: 3px solid var(--target); }
+.graph-key i.comparison { border-color: var(--center); }
+.graph-key i.tangent { border-top: 2px dashed var(--fg); }
+.graph-reading strong { color: var(--fg); }
+@media (max-width: 480px) {
+  .derivative-graph { padding: 12px; }
+  .derivative-graph svg text { font-size: 18px; }
+}
+@media (max-width: 640px) { .graph-hint { display: block; } }

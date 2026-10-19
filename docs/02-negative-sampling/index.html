@@ -7,40 +7,21 @@
 <title>Negative Sampling, Step by Step</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <meta name="description" content="Watch skip-gram Word2Vec with negative sampling train in the browser, one update at a time, with every number worked out.">
+<script src="../theme.js"></script>
+<link rel="stylesheet" href="../theme.css">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,500;8..60,600;8..60,700&family=Source+Sans+3:ital,wght@0,400;0,500;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
-/* Tokens. Ink-on-paper textbook: cool paper, navy ink, one blue for the center word and one orange for the
-   context word (those two carry meaning everywhere on the page, so nothing else uses them decoratively).
+/* Warm paper, teal for the center word, ochre for the context word.
    Type: Source Serif 4 for headings, Source Sans 3 for reading, JetBrains Mono for code and numbers.
    Layout: a reading column for prose, full width for the interactive bench and the tables. */
 :root{
-  --bg:#f6f7f9; --surface:#ffffff; --sunk:#f0f2f6; --line:#dde2e9; --line-strong:#c5ccd6;
-  --fg:#18212e; --muted:#525e70; --faint:#8b94a3;
-  --center:#2357a8;   /* the center word / h */
-  --target:#c0580f;   /* the true context word */
-  --pos:#c23b3b; --neg:#2f6cc0;  /* diverging heatmap ends */
-  --g-pets:#24805e; --g-fruit:#c0580f; --g-veh:#6650c0; --g-adj:#8b94a3;
-  --hl:#fff3c4; --hl-edge:#d9a520;
-  --ink-band:#18212e; --ink-band-fg:#f3f5f8;
   --f-display:"Source Serif 4","Iowan Old Style","Georgia",serif;
   --f-body:"Source Sans 3",system-ui,-apple-system,"Segoe UI",sans-serif;
   --f-mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
   --r:6px;
 }
-@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
-  --bg:#10151c; --surface:#161d27; --sunk:#1c2430; --line:#2a3443; --line-strong:#3a4658;
-  --fg:#e6ebf1; --muted:#a0abb9; --faint:#6f7b8b;
-  --center:#6aa6f2; --target:#f19a52; --pos:#f07070; --neg:#5c9cf0;
-  --g-pets:#4fc095; --g-fruit:#f19a52; --g-veh:#a594f0; --g-adj:#7d8a98;
-  --hl:#3a3218; --hl-edge:#b8902a; --ink-band:#0b0f14; --ink-band-fg:#e6ebf1; color-scheme:dark}}
-:root[data-theme="dark"]{
-  --bg:#10151c; --surface:#161d27; --sunk:#1c2430; --line:#2a3443; --line-strong:#3a4658;
-  --fg:#e6ebf1; --muted:#a0abb9; --faint:#6f7b8b;
-  --center:#6aa6f2; --target:#f19a52; --pos:#f07070; --neg:#5c9cf0;
-  --g-pets:#4fc095; --g-fruit:#f19a52; --g-veh:#a594f0; --g-adj:#7d8a98;
-  --hl:#3a3218; --hl-edge:#b8902a; --ink-band:#0b0f14; --ink-band-fg:#e6ebf1; color-scheme:dark}
 *{box-sizing:border-box}
 [hidden]{display:none!important}
 html{scroll-behavior:smooth;scroll-padding-top:16px}
@@ -70,7 +51,6 @@ p code,li code,label code{background:var(--sunk);border:1px solid var(--line);bo
 .nav{display:flex;gap:4px 18px;flex-wrap:wrap;align-items:center;font-size:14.5px}
 .nav a{color:var(--muted);text-decoration:none}
 .nav a:hover{color:var(--fg);text-decoration:underline}
-.theme-btn{font-size:13px;padding:4px 10px}
 
 /* hero */
 .hero{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);gap:40px;align-items:center;padding-top:24px}
@@ -129,7 +109,7 @@ button:hover{border-color:var(--muted)}
 button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,a:focus-visible{outline:2px solid var(--center);outline-offset:2px}
 button.primary{background:var(--center);border-color:var(--center);color:var(--surface)}
 button.primary:hover{filter:brightness(1.08)}
-.pos{display:flex;gap:10px;align-items:center;flex:1 1 260px;min-width:0}
+.pos{display:flex;flex-wrap:wrap;gap:10px;align-items:center;flex:1 1 260px;min-width:0}
 .pos select{font:inherit;font-size:14px;background:var(--surface);color:var(--fg);border:1px solid var(--line-strong);border-radius:5px;padding:4px 6px}
 .pos input[type=range]{flex:1;min-width:80px;accent-color:var(--center)}
 .pos .mono{font-size:12px;color:var(--muted);white-space:nowrap}
@@ -146,6 +126,14 @@ div.explain p{padding:12px 14px;font-size:15px;line-height:1.55}
 div.explain p+p{border-left:1px solid var(--line);background:var(--sunk)}
 @media (max-width:640px){div.explain p+p{border-left:0;border-top:1px solid var(--line)}}
 div.explain p>b:first-child{display:block;font-size:13px;color:var(--muted);font-weight:600;margin-bottom:3px}
+div.explain .para{display:block}div.explain .para+.para{margin-top:8px}
+.qa{border:1px solid var(--line);border-radius:var(--r);padding:12px 14px;display:flex;flex-direction:column;gap:12px;background:var(--surface)}
+.qa-cap{font-size:13px;font-weight:600;color:var(--muted)}
+.qa summary{cursor:pointer}.qa[open] summary{margin-bottom:12px}
+.qa-item{display:flex;flex-direction:column;gap:6px;max-width:80ch}
+.qa-item p{margin:0;font-size:15px;line-height:1.55}
+.qa-item p.q{font-weight:600;color:var(--fg)}
+.qa-item+.qa-item{border-top:1px solid var(--line);padding-top:12px}
 .math{font-family:var(--f-mono);font-size:13px;background:var(--sunk);border-radius:var(--r);padding:10px 12px;overflow-x:auto;white-space:pre;line-height:1.7}
 .viz{overflow-x:auto;min-width:0}
 .viz svg{display:block}
@@ -212,6 +200,17 @@ svg .axis{stroke:var(--line)}
 @media (min-width:901px){.code{height:var(--bench-h,auto)}}
 .ln .t .hv.changed{color:var(--target)}
 .worked{padding:20px 22px 24px;display:flex;flex-direction:column;gap:16px}
+.step-purpose{border-left:3px solid var(--center);padding:2px 0 2px 16px;max-width:76ch;display:flex;flex-direction:column;gap:8px}
+.step-purpose .eyebrow{font-size:12px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+.step-purpose h3{font-family:var(--f-display);font-size:21px}
+.step-purpose p{font-size:15.5px;overflow-wrap:anywhere}
+.step-purpose .bridge{color:var(--muted);font-size:14px}
+.step-link{font-size:14px;color:var(--muted);border-bottom:1px solid var(--line);padding-bottom:12px;overflow-wrap:anywhere}
+.step-link span{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px}
+.learning-path{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:14px;padding-block:12px;border-block:1px solid var(--line)}
+.reading{max-width:74ch;display:flex;flex-direction:column;gap:12px}
+.experiment{border-left:3px solid var(--target);padding-left:14px;max-width:74ch;font-size:15px}
+@media(max-width:640px){.worked{padding:16px 14px}.step-purpose{padding-left:12px}.step-purpose h3{font-size:19px}}
 .wk-head{display:flex;flex-wrap:wrap;gap:6px 16px;align-items:baseline}
 .wk-head h2{font-size:22px}
 .wk-head .note{font-family:var(--f-mono);font-size:12px}
@@ -302,7 +301,7 @@ function typesetMath(ids=['worked','takeaways','pcaSec','intro']){const els=ids.
   <div class="topbar">
     <a class="brand" href="#top" id="top"><svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true"><rect x="1" y="9" width="7" height="8" rx="1.5" fill="none" stroke="var(--target)" stroke-width="2"/><rect x="10" y="9" width="7" height="8" rx="1.5" fill="var(--center)"/><rect x="19" y="9" width="6" height="8" rx="1.5" fill="none" stroke="var(--target)" stroke-width="2"/></svg>Negative sampling, step by step</a>
     <nav class="nav" aria-label="Sections">
-      <a href="../" class="home">← All chapters</a><a href="#s-idea">Key terms</a><a href="#s-setup">Sentences</a><a href="#s-step">Training loop</a><a href="#s-math">Math</a><a href="#s-run">Whole run</a>
+      <a href="../" class="home">← All chapters</a><a href="intuition.html">Negative sampling intuition</a><a href="#s-idea">Overview &amp; terms</a><a href="#s-setup">Sentences</a><a href="#s-step">Training loop</a><a href="#s-math">Why &amp; math</a><a href="#s-run">Whole run</a>
       <button class="theme-btn" id="bTheme" type="button" aria-label="Switch light or dark theme">Dark</button>
     </nav>
   </div>
@@ -311,11 +310,11 @@ function typesetMath(ids=['worked','takeaways','pcaSec','intro']){const els=ids.
     <div class="hero-text">
       <span class="kicker">Chapter 02 · skip-gram with negative sampling</span>
       <h1>Learning word embeddings without scoring every word</h1>
-      <p class="lede">In chapter 01 the model scored all the words in the vocabulary on every step, then used softmax to pick out the right neighbour. That works for 21 words but not for 100,000. Negative sampling swaps that one big question for a few small yes/no questions: "is this word really a neighbour?" for the real neighbour, and for a handful of randomly drawn words that aren't. Here we train it in the browser and look at every step, with every number worked out.</p>
+      <p class="lede">In chapter 01, for every pair of neighbouring words, the model gave a score to every word in the vocabulary and then picked out the real neighbour with softmax. With 21 words that's fine. With 100,000 words it means 100,000 scores for every single pair, which is far too slow. Negative sampling replaces that with a few yes/no questions per pair. One is about the real neighbour, and the answer should be yes. The others are about words picked at random, and the answer should be no. Below we train it in the browser and look at every step, with every number worked out.</p>
       <ol class="howto">
         <li><span class="n">1</span><div><b>Pick some sentences</b><p>We start from a ready-made set, or type our own.</p></div></li>
         <li><span class="n">2</span><div><b>Step through the loop</b><p>Press <b>Line ▶</b> or the → key. The running line of code lights up.</p></div></li>
-        <li><span class="n">3</span><div><b>Read the math</b><p>Every formula is shown with this step's real numbers.</p></div></li>
+        <li><span class="n">3</span><div><b>Ask why, then follow the math</b><p>Use “Why this step?” to connect the purpose, formula, and real numbers.</p></div></li>
       </ol>
     </div>
     <figure class="figure" style="margin:0">
@@ -334,25 +333,34 @@ function typesetMath(ids=['worked','takeaways','pcaSec','intro']){const els=ids.
         <text x="444" y="168" text-anchor="middle" class="fig-word" style="font-size:19px;fill:var(--muted)">fast</text>
         <text x="72" y="204" text-anchor="middle" style="font-family:var(--f-body);font-size:13px;fill:var(--target);font-weight:600">real neighbour</text>
         <text x="72" y="222" text-anchor="middle" style="font-family:var(--f-body);font-size:13px;fill:var(--fg)">answer: yes ↑</text>
-        <text x="320" y="204" text-anchor="middle" style="font-family:var(--f-body);font-size:13px;fill:var(--muted)">K = 3 randomly drawn words</text>
+        <text x="320" y="204" text-anchor="middle" style="font-family:var(--f-body);font-size:13px;fill:var(--muted)">K = 3 words picked at random</text>
         <text x="320" y="222" text-anchor="middle" style="font-family:var(--f-body);font-size:13px;fill:var(--fg)">answer: no ↓</text>
         
       </svg>
-      <figcaption>For each real pair the model answers 1 + K yes/no questions, each from a single dot product and a sigmoid. With K = 3 that's 4 scores per step instead of one for every word in the vocabulary.</figcaption>
+      <figcaption>One training step for the pair (furry, pets). The model is asked "is pets a neighbour of furry?" and should say yes, because pets really sits next to furry. It's also asked the same about 3 random words, and should say no to each. That's 4 small calculations instead of one for each of the 21 words.</figcaption>
     </figure>
   </header>
 
   <section class="sec" id="s-idea">
-    <div class="sec-head no-num"><h2>The moving parts</h2><p>E, h, pairs and the learning rate work exactly as in chapter 01. These are the parts that are new or different.</p></div>
+    <nav class="learning-path" aria-label="Learning journey">
+      <a href="#s-idea">1. Build intuition</a><a href="#s-setup">2. Set up an experiment</a><a href="#s-step">3. Follow the code</a><a href="#s-math">4. Connect why to math</a><a href="#s-takeaways">5. Check your takeaway</a>
+    </nav>
+    <div class="reading">
+      <h2>Keep the representation goal; change the teaching task</h2>
+      <p><a href="../01-word2vec-skipgram/#s-idea">Chapter 01</a> learns representations by predicting which vocabulary word appeared nearby. Here we still want useful E vectors, but train them to distinguish observed pairs from sampled noise. Words with similar contexts can learn similar representations because they face similar decisions.</p>
+      <p><b>Why negatives?</b> Positive examples alone reward a high score for every observed pair without teaching selectivity. Noise examples provide a contrasting signal without scoring every vocabulary word. A negative is a label chosen by the sampler, not proof that the words never occur together.</p>
+      <p><b>One independent decision at a time:</b> a dot product gives a score, sigmoid turns it into a positive-label probability, and binary loss compares it with label 1 or 0. These probabilities do not sum to 1 and are not calibrated probabilities of being a neighbour. This is a different objective, not an approximation that reproduces the full-softmax loss.</p>
+    </div>
+    <div class="sec-head no-num"><h2>The moving parts</h2><p>E, h, the pairs and the learning rate work exactly as in chapter 01. These are the parts that are new or different. Each one is explained again, with real numbers, on the step where the code uses it.</p></div>
     <dl class="parts" id="intro">
-      <div><dt>W <span class="shape">(words × D)</span></dt><dd>Still one vector per word, but now stored as rows, the same shape as E. W[word] is that word's vector.</dd></div>
-      <div><dt>u</dt><dd>The row of W for the word being checked: the real neighbour, or one of the wrong words.</dd></div>
-      <div><dt>score = h · u</dt><dd>One number for one pair of words. Big means "probably neighbours".</dd></div>
-      <div><dt>σ (sigmoid)</dt><dd>Turns a score into a chance between 0 and 1. σ(0) = 0.5, so a score of 0 means 50/50.</dd></div>
-      <div><dt>wrong word</dt><dd>A randomly drawn word, also called a negative sample. The model should answer "no" for it.</dd></div>
-      <div><dt>K</dt><dd>How many wrong words are drawn for every real pair.</dd></div>
-      <div><dt>P(w) ∝ count<sup>0.75</sup></dt><dd>How likely each word is to be drawn as a wrong word: frequent words more often.</dd></div>
-      <div><dt>loss</dt><dd>−ln(chance of yes) for the real word, plus −ln(chance of no) for each wrong word.</dd></div>
+      <div><dt>W <span class="shape">(words × D)</span></dt><dd>A second table of numbers with one row per word, the same shape as E. A word's row in W is used when that word is the one being asked about ("is it a neighbour?"). Chapter 01 stored the same numbers as one column per word.</dd></div>
+      <div><dt>u</dt><dd>The row of W for the word we're asking about: the real neighbour, or one of the random words.</dd></div>
+      <div><dt>score = h · u</dt><dd>Multiply h and u number by number, then add the products up. The result is one number for one pair of words. Higher means the model leans toward "yes, they're neighbours".</dd></div>
+      <div><dt>σ (sigmoid)</dt><dd>Turns a score into a chance between 0% and 100%. Score 0 → 50%, score 2 → 88%, score −2 → 12%.</dd></div>
+      <div><dt>random word (negative)</dt><dd>A word sampled as noise and assigned label 0. Only the current context is excluded, so another observed neighbour may still be drawn. Labels describe the training task, not absolute facts about language.</dd></div>
+      <div><dt>K</dt><dd>How many random words we pick for every real pair. 3 here.</dd></div>
+      <div><dt>P(w) ∝ count<sup>0.75</sup></dt><dd>The chance that a word gets picked as a random word. Words that appear more often in the sentences get picked more often, and the 0.75 power evens that out a little.</dd></div>
+      <div><dt>loss</dt><dd>The cost of the model's answers for one pair: −log(the chance it gave to "yes") for the real neighbour, plus −log(the chance it gave to "no") for each random word. 0 would mean it was 100% sure and right every time.</dd></div>
     </dl>
   </section>
 
@@ -390,10 +398,11 @@ function typesetMath(ids=['worked','takeaways','pcaSec','intro']){const els=ids.
         <div><dt>D</dt><dd>How many numbers describe each word.</dd></div>
         <div><dt>LEARNING_RATE</dt><dd>How big each correction is. Too big and training jumps around.</dd></div>
         <div><dt>EPOCHS</dt><dd>How many times the model goes through every pair.</dd></div>
-        <div><dt>K</dt><dd>How many wrong words are drawn for each real pair.</dd></div>
+        <div><dt>K</dt><dd>How many random words are picked for each real pair.</dd></div>
       </dl>
       <p class="runnote" id="runnote"></p>
     </div>
+    <p class="experiment"><b>Predict before changing K.</b> Near initialization each binary decision costs about log(2), so doubling K adds more loss terms as well as more work. Compare patterns and rankings after a change, not raw losses across different K values. Use EPOCHS to study how the same objective develops over time.</p>
   </section>
 
   <section class="sec" id="s-step">
@@ -429,7 +438,8 @@ function typesetMath(ids=['worked','takeaways','pcaSec','intro']){const els=ids.
   </section>
 
   <section class="sec" id="s-math">
-    <div class="sec-head"><span class="sec-num">3</span><h2>The math behind the highlighted line</h2><p>The formula first, then where it comes from, then the same formula with this step's real numbers. Nothing is rounded away: every table shows every word.</p></div>
+    <div class="sec-head"><span class="sec-num">3</span><h2>Why this step, then the math</h2><p>Start with the purpose and what the current result means. Then follow the original formula, derivation, and worked tables. This section follows the selected training line; displayed decimals are rounded, calculations use full precision.</p></div>
+    <p class="note"><b>Notation:</b> log means log<sub>e</sub>, the natural logarithm (base e ≈ 2.718), as in <code>np.log</code> and <code>Math.log</code>. Dashed tangents show derivatives as local slopes. Read the slope's sign before following the algebra.</p>
     <div class="panel worked" aria-live="polite">
       <div class="wlegend"><span><i class="sw" style="background:color-mix(in oklab,var(--target) 22%,var(--surface))"></i>the real context word</span><span><i class="sw" style="box-shadow:inset 0 0 0 2px var(--target)"></i>the number that matters</span></div>
       <div id="worked" style="display:flex;flex-direction:column;gap:14px;min-width:0"></div>
@@ -442,19 +452,19 @@ function typesetMath(ids=['worked','takeaways','pcaSec','intro']){const els=ids.
       <div class="panel">
         <div class="grid-head"><h3>Loss</h3>
           <label class="note" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="chk50"> <span id="chk50lbl">show what more epochs would do</span></label></div>
-        <p class="note">Lower is better. Each grey dot is one pair (its 1 + K loss terms added up); the blue line is the average for each epoch.</p>
+        <p class="note">Lower is better. Each grey dot is one pair: its real-neighbour cost plus the cost of its K random words. The teal line is the average for each epoch.</p>
         <div class="viz" id="lossViz"></div>
         <div class="legend"><span><i style="background:var(--faint)"></i>loss of each pair</span><span><i style="background:var(--center)"></i>epoch average</span><span><i style="background:var(--target)"></i>current pair</span></div>
       </div>
       <div class="panel">
         <div class="grid-head"><h3>Embedding space</h3><span class="note" id="pcaNote"></span></div>
-        <p class="note">Each dot is a word. Words that the model thinks are alike sit close together. The 2-D view is made with PCA (lines 66–78), worked out step by step in chapter 01.</p>
+        <p class="note">Each dot projects a normalized row of E into 2-D. Similar directions can suggest shared usage; projection can hide differences. This E-to-E comparison differs from the E-to-W training scores. <a href="../01-word2vec-skipgram/#s-pca">Chapter 01 works through PCA</a> (lines 66–78 here).</p>
         <div class="viz" id="pcaViz"></div>
         <div class="legend" id="pcaLegend"></div>
       </div>
       <div class="panel pred" style="grid-column:1/-1">
         <div class="grid-head"><h3>What the model predicts</h3><span class="note" id="predNote"></span></div>
-        <p class="note" style="margin:0">For each word, the model answers "is word j a neighbour?" for every word j, using the weights at the current position: σ(E[word] · W[j]). These are separate yes/no answers, so they don't add up to 100%. A <span style="color:var(--g-pets)">green</span> pick really appears next to that word. A good model says yes to real neighbours and no to the rest.</p>
+        <p class="note" style="margin:0">For each center, this inspection table evaluates σ(E[word] · W[j]) for every candidate, then lists the strongest positive-label outputs. Training itself only scores the positive and K sampled negatives. The percentages do not add up to 100%. A <span style="color:var(--g-pets)">green</span> word is an observed neighbour, but it can also receive noise labels: its best score need not approach 100%, and changes to K or the noise distribution change the task.</p>
         <div class="scroll" id="predViz"></div>
       </div>
     </div>
@@ -466,12 +476,15 @@ function typesetMath(ids=['worked','takeaways','pcaSec','intro']){const els=ids.
     <div class="takeaways" id="takeaways"></div>
   </section>
 
+  <p class="experiment"><b>Before moving on:</b> why would “yes” to every word satisfy positive-only training but not SGNS? Explain why a sampled neighbour can receive label 0, and why changing K changes the loss scale. <a href="../01-word2vec-skipgram/#s-run">Compare with chapter 01</a> using groups and rankings, not equal loss values.</p>
+
   <footer class="foot">
     <p>Everything runs in the browser. The random numbers copy NumPy's <code>np.random.seed(42)</code> exactly, so the losses match the Python code line for line.</p>
     <p><a href="#top">Back to top</a></p>
   </footer>
 </div>
 
+<script src="../math-graphs.js"></script>
 <script>
 // ---- numpy legacy RandomState (MT19937 + legacy gauss + legacy shuffle), so runs match np.random.seed(42) ----
 class NpRandom{
@@ -606,7 +619,7 @@ function codeLines(){
  [`D = ${hv('D',D)}`,null,"",true],
  [`LEARNING_RATE = ${hv('LR',LR)}`,null,"",true],
  [`EPOCHS = ${hv('EPOCHS',EPOCHS)}`,null,"",true],
- [`K = ${hv('K',K)}     # wrong words per real pair`,null,"",true],
+ [`K = ${hv('K',K)}     # random words per real pair`,null,"",true],
  ["vocab_length = len(vocab)",null],
  ["",null],
  ["# every (center, context) pair within WINDOW",null,"cm"],
@@ -621,7 +634,7 @@ function codeLines(){
  ["E = np.random.randn(vocab_length, D) * 0.1",null],
  ["W = np.random.randn(vocab_length, D) * 0.1  # one row per word",null],
  ["",null],
- ["# how often each word is picked as a wrong word",null,"cm"],
+ ["# how often each word is picked as a random word",null,"cm"],
  ["counts = np.bincount([word_to_id[w] for s in sentences for w in s])",null],
  ["neg_probs = counts ** 0.75 / (counts ** 0.75).sum()",null],
  ["",null],
@@ -651,7 +664,7 @@ function codeLines(){
  ["        E[center] -= LEARNING_RATE * error * u","pupd"],
  ["        W[context] -= LEARNING_RATE * error * h","pupd"],
  ["",null],
- ["        # K wrong words: push their scores down",null,"cm"],
+ ["        # K random words: push their scores down",null,"cm"],
  ["        for neg in sample_negatives(context, K):","sample"],
  ["            h = E[center].copy()","neg"],
  ["            u = W[neg].copy()","neg"],
@@ -684,8 +697,8 @@ function lineOf(prefix,from=0){const L=codeLines();for(let i=from;i<L.length;i++
 function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;')}
 function drawCode(){$('src').innerHTML=codeLines().map(([n,t,ph,cls,raw])=>`<div class="ln ${cls||''}" data-ph="${ph||''}"><span class="n">${n??'…'}</span><span class="t">${raw?t:esc(t)}</span></div>`).join('')}
 
-const PH_LABEL={shuffle:"shuffle",pair:"pick pair",h:"lookup h, u",pscore:"score",ploss:"loss",perr:"error",pupd:"update",sample:"sample wrong words",end:"epoch end"};
-const phLabel=p=>p.startsWith('neg')?`wrong word ${+p.slice(3)+1}`:PH_LABEL[p];
+const PH_LABEL={shuffle:"shuffle",pair:"pick pair",h:"lookup h, u",pscore:"score",ploss:"loss",perr:"error",pupd:"update",sample:"pick random words",end:"epoch end"};
+const phLabel=p=>p.startsWith('neg')?`random word ${+p.slice(3)+1}`:PH_LABEL[p];
 function phasesFor(k){
   const L=[];if(k===0)L.push("shuffle");
   L.push("pair","h","pscore","ploss","perr","pupd","sample");
@@ -694,7 +707,7 @@ function phasesFor(k){
   return L;
 }
 const isNeg=p=>/^neg\d+$/.test(p);
-// a code line lights up when the current phase is its phase (all K wrong words share lines 56-62)
+// a code line lights up when the current phase is its phase (all K random words share lines 56-62)
 const lineOn=ph=>ph===S.ph||(ph==="neg"&&isNeg(S.ph))||(ph==="epoch"&&S.ph==="shuffle");
 
 let S={ep:0,k:0,ph:"shuffle"};
@@ -757,8 +770,93 @@ const wCellH=()=>clamp(Math.floor(240/D),4,22);
 
 // ---------- stage per phase ----------
 // plain-language summary for the top card: what happens, and why it matters
-const SUM=(what,why)=>`<div class="explain"><p><b>What happens</b> ${what}</p><p><b>Why it matters</b> ${why}</p></div>`;
+// what/why may hold several paragraphs (array); qa = [[question, answer], ...] shown under the card
+const paras=t=>(Array.isArray(t)?t:[t]).filter(Boolean).map(x=>`<span class="para">${x}</span>`).join('');
+const SUM=(what,why,qa=[])=>`<div class="explain"><p><b>What happens</b> ${paras(what)}</p><p><b>Why we do it</b> ${paras(why)}</p></div>`+
+  (qa.some(Boolean)?`<details class="qa"><summary class="qa-cap">Questions &amp; edge cases (${qa.filter(Boolean).length})</summary>${qa.filter(Boolean).map(([q,a])=>`<div class="qa-item"><p class="q">${q}</p>${(Array.isArray(a)?a:[a]).map(x=>`<p>${x}</p>`).join('')}</div>`).join('')}</details>`:'');
+function purposeHTML(compact=false){
+  const s=st(), {c,x,pos,neg}=s, cw=esc(V[c]), xw=esc(V[x]);
+  let phase,title,why,example,next;
+  if(isNeg(S.ph)){
+    const i=+S.ph.slice(3),q=neg[i],nw=esc(V[q.n]),after=dot(q.hA,q.uA),repeat=neg.slice(0,i).some(v=>v.n===q.n);
+    phase='Noise example · forward, backward, update';title='Teach selectivity, not “yes” to everything';
+    why='A sampled candidate receives label 0. Its loss uses the probability of “no”, so its score gradient is sigmoid(score) - 0, a positive signal asking for a lower score. This contrasts with the positive update.';
+    example=`For <b>${nw}</b>, score <code>${q.score.toFixed(5)}</code> gives positive-label output <code>${q.sg.toFixed(5)}</code> and loss <code>${q.loss.toFixed(5)}</code>. After this binary update its score is <code>${after.toFixed(5)}</code>. ${isNb(c,q.n)?'This candidate is also an observed neighbour: data and noise labels can overlap.':'This candidate is not an observed neighbour in the current corpus.'}`;
+    next=`Re-read h before each update: it has already changed. ${repeat?'This word was sampled earlier too; its latest W row is used again.':'Both vector gradients use pre-update copies.'} ${i<K-1?'Next comes another sampled candidate.':'The next real pair uses all the updates made here.'} “Push apart” describes the local dot-product objective, not guaranteed Euclidean separation or improvement at an oversized learning rate.`;
+  }else switch(S.ph){
+  case "shuffle":
+    phase='Prepare the evidence';title='Keep the learning; refresh the order and measurement';
+    why='Each epoch revisits the same observed pairs with the weights learned so far. Shuffling avoids making one fixed ordering special; total_loss resets so this epoch has its own measurement.';
+    example=`This epoch has <b>${NP}</b> observed pairs and <b>${NP*(K+1)}</b> binary updates. The initial random E and W break symmetry; if both were zero, each vector gradient would be zero. Seed 42 makes the start reproducible.`;
+    next='Nothing here discards the learned embeddings. Next we choose the real pair whose positive label and sampled noise will provide feedback.';break;
+  case "pair":
+    phase='Choose a training target';title='Use observed context as evidence, not a target vector';
+    why='There is no supplied “correct” embedding. Instead, the text supplies an observed pairing and the sampler supplies contrasts. Learning to distinguish their sources can make representations useful.';
+    example=`The observed pair is <b>(${cw}, ${xw})</b>: its label is 1. It will be followed by <b>${K}</b> label-0 draws. IDs <code>${c}</code> and <code>${x}</code> only locate vectors; they are not features.`;
+    next='Next, retrieve E[center] and W[context]. The task concerns observed data versus noise; a noise label is not a claim that a pairing is impossible.';break;
+  case "h":
+    phase='Forward pass · representation';title='Keep the center and context roles separate';
+    why='E provides the representation we want to keep; W turns candidate contexts into trainable questions about that representation. Words sharing contexts can receive related signals through the same W rows.';
+    example=`<code>h[0] = ${pos.h[0].toFixed(5)}</code> comes from E[${c}]; <code>u[0] = ${pos.u[0].toFixed(5)}</code> comes from W[${x}]. Both vectors have ${D} coordinates, so their matching coordinates can be multiplied next.`;
+    next='Copies preserve the values needed by both gradients. Here W has rows rather than chapter 01’s columns: that makes individual candidates easy to select without changing the role of the table.';break;
+  case "pscore":
+    phase='Forward pass · independent prediction';title='Turn compatibility into one binary prediction';
+    why='The dot product combines matching coordinates into evidence about this pair. Sigmoid converts that unbounded score into a positive-label probability using just this candidate, unlike softmax’s vocabulary-wide competition.';
+    example=`The ${D} coordinate products sum to <code>${pos.score.toFixed(5)}</code>. Sigmoid gives <b>${pct(pos.sg)}</b>; score 0 would give 50%. ${Math.abs(pos.score)>15?'The displayed implementation clips this score to [-15, 15] for the sigmoid.':'The code clips sigmoid inputs to [-15, 15] as an overflow guard.'}`;
+    next='A percentage makes the binary prediction interpretable but does not make it a next-word probability. Next, compare it with label 1 using a differentiable cost.';break;
+  case "ploss":
+    phase='Forward pass · positive objective';title='Penalize missing an observed pair';
+    why='We need a number to minimize, not just a percentage to display. Negative log probability makes confident misses costly and approaches zero as the positive-label probability approaches 1.';
+    example=`For the observed pair, <code>-log(sigmoid(score))</code> is computed stably as <code>logaddexp(0, -score) = ${pos.loss.toFixed(5)}</code>. A 50% answer costs about 0.693; a 10% answer costs about 2.303.`;
+    next='logaddexp evaluates the unclipped mathematical loss without forming a risky exponential. The clipped sigmoid used by the gradient approximates extreme values. This positive term is only the first of K + 1 losses.';break;
+  case "perr":
+    phase='Backward pass · sensitivity';title='Trace the cost back to both vectors';
+    why='The chain rule combines how the loss reacts to the score with how the score reacts to each coordinate. The candidate vector u tells us how h affected the score; h does the same for u.';
+    example=`<code>error = ${pos.sg.toFixed(5)} - 1 = ${pos.err.toFixed(5)}</code>. Thus <code>gradient_h[0] = error × ${pos.u[0].toFixed(5)} = ${pos.gh[0].toFixed(5)}</code>, while <code>gradient_u[0] = ${pos.gu[0].toFixed(5)}</code>.`;
+    next='A negative score gradient says raising this score locally reduces the positive loss. These are sensitivities, not parameter changes yet; both use the old vectors.';break;
+  case "pupd":
+    phase='Parameter update · positive pair';title='Store feedback by taking a small downhill step';
+    why='A gradient points toward increasing loss locally. Subtracting it reverses that direction; the learning rate sets how far to move. Updating only W would leave the E representation untrained.';
+    example=`<code>E[${c}][0] = ${pos.h[0].toFixed(5)} - ${LR} × (${pos.gh[0].toFixed(5)}) = ${pos.hA[0].toFixed(5)}</code>. For this pair the score changes from <code>${pos.score.toFixed(5)}</code> to <code>${dot(pos.hA,pos.uA).toFixed(5)}</code>.`;
+    next='Only these two rows changed. The code updates immediately, before drawing and processing negatives; it does not accumulate all K + 1 gradients at a single frozen center vector. Oversized steps can overshoot.';break;
+  case "sample":{
+    const T=RUN.NT,q=T.P[c],accepted=q/(1-T.P[x]);
+    phase='Choose contrasting evidence';title='Sample noise without confusing it with a model prediction';
+    why='Without negatives, high scores for every observed pair would have no contrasting cost. Counts raised to 0.75 favor common words but less strongly than raw frequency; normalization turns those weights into sampling probabilities.';
+    example=`For <b>${cw}</b>, count <code>${T.counts[c]}</code> gives weight <code>${T.pw[c].toFixed(5)}</code> out of <code>${T.tot.toFixed(5)}</code>: base chance <code>${q.toFixed(5)}</code>. ${c===x?'This is the current context, so it is rejected, not accepted as noise.':`After excluding ${xw}, its accepted-draw chance is <code>${accepted.toFixed(5)}</code>.`}`;
+    next=`Reject only the current context and draw until ${K} candidates are accepted; repeats and other observed neighbours are allowed. Sampling has its own overhead: the saving is K + 1 scores and updates, not a guarantee of vocabulary-independent runtime.`;break;}
+  case "end":
+    phase='Measure progress';title='Average like with like';
+    why='Each real pair contributes one positive cost plus K negative costs. Dividing by the number of real pairs gives a consistent epoch measurement for this setting of K, rather than an average per binary decision.';
+    example=`<code>${s.total.toFixed(4)} / ${NP} = ${RUN.losses[S.ep].toFixed(4)}</code>. Near-zero scores would give <code>(${K} + 1) × log(2) = ${((K+1)*Math.LN2).toFixed(4)}</code> per real pair.`;
+    next='The sum records each term before its own immediate update, not one frozen-weight evaluation. Compare trends at fixed K, not raw values against another K or chapter 01. Lower loss means fitting this discrimination task better, not perfect linguistic similarity.';break;
+  }
+  if(compact)return `<p class="step-link"><span>${phase}</span><a href="#s-math">Why this step? ${title}</a></p>`;
+  return `<aside class="step-purpose" aria-label="Why this step?"><span class="eyebrow">${phase}</span><h3>${title}</h3><p>${why}</p><p>${example}</p><p class="bridge">${next}</p></aside>`;
+}
 const pct=v=>(100*v).toFixed(2)+'%';
+const pct0=v=>(100*v).toFixed(v<0.1&&v>0?1:0)+'%';
+const poss=w=>w.endsWith('s')?w+"'":w+"'s";
+const wl=a=>a.length<=1?a.join(''):a.slice(0,-1).join(', ')+' and '+a[a.length-1]; // "a, b and c"
+// real neighbours: RN[c][j] = how many (c, j) pairs one epoch has; NC[c] = pairs with c as center
+let RN=[], NC=[];
+function buildNeighbours(){RN=V.map(()=>({}));NC=V.map(()=>0);for(const [a,b] of RUN.order[0]){RN[a][b]=(RN[a][b]||0)+1;NC[a]++}}
+const isNb=(c,j)=>!!RN[c][j];
+const nbList=c=>Object.keys(RN[c]).map(Number);
+// a sentence where x sits within WINDOW of c, for quoting
+function sentWith(c,x){const cw=V[c],xw=V[x],w=RUN.cfg.WINDOW;for(const s of SENTS)for(let i=0;i<s.length;i++)if(s[i]===cw)for(let j=Math.max(0,i-w);j<=Math.min(s.length-1,i+w);j++)if(j!==i&&s[j]===xw)return s.join(' ');return ''}
+// why random "no" answers that are sometimes wrong still work, with this word's own numbers
+function whyItWorks(c,x,prefer=-1){
+  const cw=V[c], P=RUN.NT.P, nbs=nbList(c), others=nbs.filter(j=>j!==x);
+  if(!others.length)return `${cw} has only one observed neighbour, ${V[x]}. That word is rejected whenever noise is drawn for this center, so none of this center's label-0 examples overlaps an observed neighbour. That does not make every sampled pair impossible in language outside this corpus.`;
+  const j=others.includes(prefer)?prefer:others[0],yes=RN[c][j];
+  const terms=nbs.filter(a=>a!==j).map(a=>({a,n:RN[c][a],p:P[j]/(1-P[a])}));
+  const expected=terms.reduce((sum,t)=>sum+t.n*K*t.p,0);
+  return [`For ${cw}, the observed pair (${cw}, ${V[j]}) supplies label 1 ${yes} time${yes===1?'':'s'} per epoch. The same candidate can receive label 0 while another context is the positive.`,
+    `Rejection matters: when the positive context is a, the accepted noise chance for ${V[j]} is P(${V[j]}) / (1 − P(a)), not just P(${V[j]}).`,
+    `Summing across the other contexts gives an expected noise-label count of ${terms.map(t=>`${t.n} × ${K} × ${t.p.toFixed(4)} (excluding ${V[t.a]})`).join(' + ')} = ${expected.toFixed(2)} per epoch. Actual random counts vary.`,
+    `Both labels are intentional: SGNS distinguishes data from noise, not true from impossible neighbours. Their balance, K, the noise distribution, and shared finite-dimensional vectors all affect the learned score. More positive labels alone do not guarantee closeness or a probability near 100%.`];
+}
 function vecPair(rows,max){ // rows: [label, vector, css color]
   return `<div style="display:flex;flex-direction:column;gap:8px;min-width:0">${rows.map(([l,v,col])=>`<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><span class="mono" style="min-width:9ch;${col?`color:${col};font-weight:600`:''}">${l}</span><div class="viz">${vecSVG(v,{max,label:l})}</div></div>`).join('')}</div>`;
 }
@@ -767,12 +865,25 @@ function stageHTML(){
   const pair=`<div class="pairline"><span class="big"><span class="c-center">${cw}</span> → <span class="c-target">${xw}</span></span><span class="mono note">(center, context) = (${c}, ${x}) · epoch ${S.ep+1}, pair ${S.k+1} of ${NP} · update ${idx()+1} of ${NP*EPOCHS}</span></div>`;
   const Emax=Math.max(...Eb.flat().map(Math.abs)), Wmax=Math.max(...Wb.flat().map(Math.abs));
   const cell=clamp(Math.floor(300/D),6,44);
+  const negW=neg.map(q=>V[q.n]), realNegs=neg.filter(q=>isNb(c,q.n)).map(q=>V[q.n]);
+  const nbs=nbList(c).map(j=>V[j]);
   if(isNeg(S.ph)){
     const i=+S.ph.slice(3), q=neg[i], nw=V[q.n], m=Math.max(...[q.h,q.u,q.hA,q.uA].flat().map(Math.abs));
-    const sB=q.score, sA=dot(q.hA,q.uA);
-    return pair+`<p class="note" style="margin:0">Wrong word ${i+1} of ${K}: <b>${nw}</b></p>`+
-    SUM(`Ask the same yes/no question for <b>${nw}</b>, a randomly drawn word: "is ${nw} a neighbour of ${cw}?" The score is h · W[${nw}] = <span class="mono">${n4(sB)}</span>, so the model says yes with ${pct(q.sg)}. The right answer here is no, so the loss is −ln(1 − ${n4(q.sg)}) = <span class="mono">${n4(q.loss)}</span> and the error is just the chance it gave: <span class="mono">${n4(q.err)}</span>.`,
-      `Both vectors move a little away from each other, so next time ${nw}'s score with ${cw} is lower: <span class="mono">${n4(sB)}</span> → <span class="mono">${n4(sA)}</span>. Only ${cw}'s row of E and ${nw}'s row of W change. ${q.sg<0.1?`The model was already fairly sure (only ${pct(q.sg)}), so the push is small.`:`The model gave it ${pct(q.sg)}, so the push is sizeable.`}`)+
+    const sB=q.score, sA=dot(q.hA,q.uA), real=isNb(c,q.n);
+    return pair+`<p class="note" style="margin:0">Random word ${i+1} of ${K}: <b>${nw}</b></p>`+
+    SUM([`We ask the model: "is <b>${nw}</b> a neighbour of ${cw}?" We tell it the answer is <b>no</b>, because ${nw} was picked at random. The steps are the same as for the real pair:`,
+      `1. Read ${poss(cw)} row of E again (h) and ${poss(nw)} row of W (u). We read h again because the step before this one already changed it.`,
+      `2. Score: multiply h and u number by number and add up. That gives <span class="mono">${n4(sB)}</span>. The sigmoid turns it into the chance of "yes": ${pct(q.sg)}.`,
+      `3. Loss: label 0 rewards the probability of "no". The stable, unclipped loss is <code>logaddexp(0, score_neg)</code> = <span class="mono">${n4(q.loss)}</span>. ${Math.abs(sB)<=15?`This is −log(1 − sigmoid(score)), with "no" probability ${pct(1-q.sg)}.`:'The sigmoid helper clips extreme inputs, but the loss uses the original score.'}`,
+      `4. Error: the chance it gave to "yes" minus the chance it should have given (0): ${n4(q.sg)} − 0 = <span class="mono">${n4(q.err)}</span>.`,
+      `5. Update: subtract the scaled gradients from ${poss(cw)} row of E and ${poss(nw)} row of W, aiming to lower their dot product.`],
+      [`For this update the score changes <span class="mono">${n4(sB)}</span> → <span class="mono">${n4(sA)}</span>, and its positive-label output changes ${pct(q.sg)} → ${pct(sigmoid(sA))}. A sufficiently small step follows the local downhill direction; a large step can overshoot.`,
+       q.sg<0.1?`The model already gave "yes" only ${pct(q.sg)}, so it was nearly right, and the error and the push are small.`:`The model gave "yes" ${pct(q.sg)}, which is far from the 0% we want, so the error and the push are fairly big.`,
+       real?`<b>Label overlap:</b> ${nw} is an observed neighbour of ${cw} (in "${sentWith(c,q.n)}"), but this draw still receives noise label 0. The questions below explain the balance of signals.`:`${nw} is not an observed neighbour of ${cw} in this corpus. Label 0 describes its role as sampled noise, not a universal claim about these words.`],
+      [real?[`Why does a real neighbour get a "no"?`,[`The random draw never looks at the sentences. Only the word in this pair (${xw}) is thrown back if it's drawn. ${poss(cw)} other real neighbours can still be drawn.`]]:null,
+       real?[`Then why does training still work?`,whyItWorks(c,x,q.n)]:null,
+       [`Why is the error just σ(score) this time?`,[`It's the same rule as for the real pair: the chance the model gave to "yes" minus the chance it should have given. For the real neighbour the right chance was 1, so the error was σ − 1. For a random word the right chance is 0, so the error is σ − 0 = σ. It's always positive, which means "lower this score".`]],
+       [`What does “push apart” actually mean?`,[`The update is new = old − LEARNING_RATE × error × the other row. The positive error asks for a lower dot product locally. This is not a direct Euclidean-distance objective; both vector direction and length can change.`]]])+
     vecPair([[`h = E[${cw}]`,q.h,'var(--center)'],[`u = W[${nw}]`,q.u,''],[`h after`,q.hA,'var(--center)'],[`u after`,q.uA,'']],m)+
     `<div class="row2"><div class="viz">${sigmoidMini(sB,'σ(score)')}</div><div class="viz">${lossMini(sB,false)}</div></div>`;
   }
@@ -780,54 +891,101 @@ function stageHTML(){
   case "shuffle":{
     const ord=RUN.order[S.ep].slice(0,12).map(([a,b])=>`(${V[a]}, ${V[b]})`).join('  ');
     return `<div class="pairline"><span class="big">Epoch ${S.ep+1} of ${EPOCHS} begins</span></div>
-    ${SUM(`All ${NP} word pairs are put in a new random order, and the running total of the loss is set back to 0.`,`The model learns a little after every single pair, so the order affects what it learns first. A fresh order each epoch stops it from always learning the same pairs first.`)}
-    <h3>First 12 pairs this epoch</h3><div class="math">${ord} …</div>
-    <p class="note">The pairs are made exactly as in chapter 01: each word paired with every word up to ${RUN.cfg.WINDOW} position${RUN.cfg.WINDOW>1?'s':''} away in its own sentence. ${SENTS.length} sentences give ${NP} pairs.</p>`;}
-  case "pair":
-    return pair+SUM(`Take the next pair: <span class="c-center">${cw}</span> is the center word and <span class="c-target">${xw}</span> really appeared next to it. Instead of scoring all ${NV} words like chapter 01, the model now answers ${K+1} yes/no questions: "is <span class="c-target">${xw}</span> a neighbour of ${cw}?" (answer: yes), then the same question for ${K} randomly drawn words (answer: no).`,
-      `Chapter 01 computed a chance for every word in the vocabulary on every step. That's fine for ${NV} words, but real vocabularies have hundreds of thousands. Here each step touches only ${K+1} words, however big the vocabulary is.`)+
+    ${SUM([`An epoch is one pass through all ${NP} word pairs. At the start of each one, two things happen:`,`1. The ${NP} pairs are put in a new random order (<code>np.random.shuffle</code>).`,`2. <code>total_loss</code> is set back to 0, so that at the end of the epoch we can work out this epoch's average.`],
+      [`The model changes a little after every single pair. So the pairs it sees first have a small head start. Shuffling every epoch means no pair always goes first.`],
+      [[`Where do the pairs come from?`,[`Exactly as in chapter 01: every word is paired with each word up to ${RUN.cfg.WINDOW} position${RUN.cfg.WINDOW>1?'s':''} away in its own sentence. For example, "${SENTS[0].join(' ')}" gives ${(()=>{const s=SENTS[0],w=RUN.cfg.WINDOW,o=[];for(let i=0;i<s.length;i++)for(let j=Math.max(0,i-w);j<=Math.min(s.length-1,i+w);j++)if(j!==i)o.push(`(${s[i]}, ${s[j]})`);return o.join(', ')})()}. All ${SENTS.length} sentences together give ${NP} pairs.`]]])}
+    <h3>First 12 pairs this epoch</h3><div class="math">${ord} …</div>`;}
+  case "pair":{
+    const sent=sentWith(c,x);
+    return pair+SUM([`We take the next pair from the shuffled list: <span class="c-center">${cw}</span> is the center word, and <span class="c-target">${xw}</span> is a word that really sits next to it${sent?`, in the sentence "${sent}"`:''}.`,
+      `For this one pair, the model has to answer ${K+1} yes/no questions:`,
+      `1. "Is <span class="c-target">${xw}</span> a neighbour of ${cw}?" The right answer is <b>yes</b>, because we just saw them side by side.`,
+      `${K>1?`2 to ${K+1}`:'2'}. The same question for ${K} words picked at random. This time they are <b>${wl(negW)}</b>. We tell the model the answer for each is <b>no</b>. How they're picked is shown on the "pick random words" step.`],
+      [`If we only ever asked questions whose answer is yes, the model could get every one right by saying "yes" to everything. Then every word would end up close to every other word, and the numbers would mean nothing.`,
+       `The "no" questions stop that. To answer well, the model has to say yes to ${xw} but no to ${wl(negW)}, so it has to learn what makes ${xw} different from a random word.`,
+       `Chapter 01 did this by comparing ${xw} with all ${NV} words at once (softmax). Here we compare it with only ${K} random words, so each pair costs ${K+1} small calculations instead of ${NV}, however big the vocabulary is.`],
+      [[`Why give label 0 to an observed neighbour?`,[`The sampler assigns noise labels without checking all the sentences. ${poss(cw)} observed neighbours are ${wl(nbs)}. Only ${xw}, this pair's context, is rejected; the others can still be drawn.`,
+         realNegs.length?`This time <b>${wl(realNegs)}</b> overlaps the observed neighbours. The same pair can therefore receive both data and noise labels.`:`This time none of ${wl(negW)} overlaps the observed neighbours.`]],
+       [`How can overlapping labels provide a useful signal?`,whyItWorks(c,x,(neg.find(q=>isNb(c,q.n))||{n:-1}).n)]])+
     `<div class="math">full softmax (chapter 01): ${NV} scores per pair
-negative sampling (here):  1 real + ${K} wrong = ${K+1} scores per pair</div>`;
+negative sampling (here):  1 real + ${K} random = ${K+1} scores per pair</div>`;}
   case "h":
-    return pair+SUM(`Read <span class="c-center">${cw}</span>'s row from E (that's h) and <span class="c-target">${xw}</span>'s row from W (that's u). Unlike chapter 01, W now has one <em>row</em> per word, the same shape as E.`,
-      `Every word has two vectors: one in E for when it's the center word, and one in W for when it's being checked as a neighbour. The question "is ${xw} a neighbour of ${cw}?" only needs these two.`)+
+    return pair+SUM([`Every word has two rows of numbers: one in E and one in W.`,
+      `We copy <span class="c-center">${poss(cw)}</span> row of E and call it <b>h</b>. It describes ${cw} when ${cw} is the center word.`,
+      `We copy <span class="c-target">${poss(xw)}</span> row of W and call it <b>u</b>. It describes ${xw} when ${xw} is the word being asked about ("is it a neighbour?").`],
+      [`The question "is ${xw} a neighbour of ${cw}?" is answered using only these two rows. On the next line we multiply them together. No other word's numbers are needed, which is what makes this fast.`],
+      [[`Why does every word need two rows, one in E and one in W?`,[`They do two different jobs. A word's row in E is used when it's the center word, and its row in W is used when it's the word being asked about. Keeping them separate lets the model learn "cats as a center word" and "cats as a neighbour" on their own. At the end we keep only E as the embeddings.`]],
+       [`Chapter 01 stored W with one column per word. Why one row per word here?`,[`They're the same numbers, just laid out the other way. Chapter 01 multiplied h by all of W at once (<code>h @ W</code>), which needs one column per word. Here we only need ${K+1} words per pair, and <code>W[word]</code> picks one word's row directly.`]],
+       [`Why <code>.copy()</code>?`,[`On lines 51–52 we change E[${cw}] and W[${xw}], and both changes must use the values from before either one changed. Without <code>.copy()</code>, h would be a live view into E. It would change as soon as line 51 updates E, and line 52 would then use the new h by mistake.`]]])+
     `<div class="row2"><div><h3>E <span class="shape">(${NV}, ${D})</span></h3><div class="viz">${matrixSVG(Eb,{rowLabels:V,max:Emax,hiRows:[c],cell,cellH:16,title:"E matrix"})}</div></div>
     <div><h3>W <span class="shape">(${NV}, ${D})</span></h3><div class="viz">${matrixSVG(Wb,{rowLabels:V,max:Wmax,tgtRows:[x],cell,cellH:16,title:"W matrix"})}</div></div>
     <div style="display:flex;flex-direction:column;gap:8px;min-width:0">${vecPair([['h',pos.h,'var(--center)'],['u',pos.u,'var(--target)']],Math.max(Emax,Wmax))}<p class="note" style="max-width:34ch">Red is positive, blue is negative. Hover any cell for its exact value.</p></div></div>`;
   case "pscore":
-    return pair+SUM(`Multiply h and u number by number and add the products up: one score, <span class="mono">${n4(pos.score)}</span>. Then the sigmoid squashes it into a chance between 0% and 100%: σ(${n4(pos.score)}) = ${pct(pos.sg)}.`,
-      `This chance is the model's answer to "is ${xw} a neighbour of ${cw}?". A big positive score means "yes", a big negative score means "no", and 0 means 50/50. ${Math.abs(pos.score)<0.1?'Right now it is close to 50/50: the model has no idea yet.':''}`)+
+    return pair+SUM([`1. Multiply h and u number by number, then add the products up: ${pos.h.map((v,i)=>`(${n4(v)} × ${par(pos.u[i])})`).join(' + ')} = <span class="mono">${n4(pos.score)}</span>. That one number is the <b>score</b>.`,
+      `2. The sigmoid turns the score into a chance between 0% and 100%: σ(${n4(pos.score)}) = ${pct(pos.sg)}. This is the model's answer to "is ${xw} a neighbour of ${cw}?"`],
+      [`When h and u have the same signs in the same places, the products are positive, the score is high and the answer leans to "yes". When their signs are opposite, the score is negative and the answer leans to "no". Training will make the rows of real neighbours alike, and the rows of random words unlike.`,
+       Math.abs(pos.score)<0.1?`Right now the score is close to 0, so the chance is close to 50%: the model has no opinion yet. That's because every number in E and W started tiny (about ±0.1), so every product is tiny.`:''],
+      [[`Why the sigmoid and not softmax like chapter 01?`,[`Softmax shares 100% out among all ${NV} words, so it needs all ${NV} scores. Here each question is about one word only, so we need one chance from one score. The sigmoid does exactly that: score 0 → 50%, score 2 → 88%, score −2 → 12%, score 5 → 99.3%.`]],
+       [`What exactly is the sigmoid?`,[`σ(score) = 1 / (1 + e<sup>−score</sup>). When the score is very big, e<sup>−score</sup> is nearly 0, so σ is nearly 1. When the score is very negative, e<sup>−score</sup> is huge, so σ is nearly 0. At score 0, e<sup>0</sup> = 1, so σ = 1/2. The curve below shows where this pair sits.`]]])+
     `<div class="math">score = ${pos.h.map((v,i)=>`(${n4(v)})(${n4(pos.u[i])})`).join(' + ')}
       = ${n5(pos.score)}
-σ(score) = 1 / (1 + e^${pos.score<0?'+':'−'}${n4(Math.abs(pos.score))}) = ${n5(pos.sg)}</div>
+σ(clip(score, −15, 15)) = 1 / (1 + e^${pos.score<0?'+':'−'}${n4(Math.abs(clamp(pos.score,-15,15)))}) = ${n5(pos.sg)}</div>
     <div class="viz">${sigmoidMini(pos.score,'σ(score)')}</div>`;
   case "ploss":
-    return pair+SUM(`The right answer is "yes", so the loss is −ln of the chance the model gave to yes: −ln(${n4(pos.sg)}) = <span class="mono">${n4(pos.loss)}</span>. The code writes it as <code>np.logaddexp(0, -score)</code>, which is the same number computed without overflow.`,
-      `A 100% yes would cost 0. A 50/50 guess costs ln 2 = 0.693. This is the first of ${K+1} loss terms for this pair; each wrong word adds one more.`)+
-    `<div class="math">loss = −ln σ(score) = ln(1 + e^(−score)) = ${n5(pos.loss)}
+    return pair+SUM([`The right answer for this question is "yes". The model gave "yes" a chance of ${pct(pos.sg)}.`,
+      `The unclipped positive loss is <code>logaddexp(0, -score)</code> = <span class="mono">${n4(pos.loss)}</span>. ${Math.abs(pos.score)<=15?`This is −log(${n4(pos.sg)}) at the current score.`:'At this extreme score, do not substitute the clipped sigmoid helper into the logarithm.'} We add the loss to <code>total_loss</code>.`,
+      `The code writes it as <code>np.logaddexp(0, -score)</code>, the stable form of the unclipped mathematical loss. At extreme scores it differs from taking the log of the clipped sigmoid helper.`],
+      [`The loss turns "how sure was the model of the right answer" into a cost: 100% sure → 0, 50% → 0.693, 10% → 2.303, 1% → 4.605. The less sure the model was, the bigger the cost.`,
+       `Training is just making this cost smaller, one small step at a time.`],
+      [[`Why <code>np.logaddexp(0, -score)</code> instead of taking the log of a sigmoid?`,[`Mathematically, −log σ(score) = log(1 + e<sup>−score</sup>). Computing this with logaddexp avoids overflow or a probability rounded to zero. For example, at score −800 the loss is about 800 without forming e<sup>800</sup>. This script's sigmoid helper instead clips its input to [−15, 15], so logging that helper's output would not give the same extreme-score loss.`]],
+       [`Is this the whole loss for the pair?`,[`No, it's the first of ${K+1} parts. Each of the ${K} random words adds its own part on line 59.`]]])+
+    `<div class="math">loss = −log σ(score) = log(1 + e^(−score)) = ${n5(pos.loss)}
 total_loss = ${n4(s.runBefore+pos.loss)}   (running sum this epoch)</div>
     <div class="viz">${lossMini(pos.score,true)}</div>`;
   case "perr":
-    return pair+SUM(`How the loss changes when the score changes: σ(score) − 1 = ${n4(pos.sg)} − 1 = <span class="mono">${n4(pos.err)}</span>. It's negative, which means "raise this score". Multiplying it by u gives the nudge for h, and multiplying it by h gives the nudge for u.`,
-      `The error is "the chance the model gave minus the chance it should have given" (1 for a real pair), exactly like p − y in chapter 01. The less sure the model was, the bigger the push.`)+
+    return pair+SUM([`1. The error is the chance the model gave to "yes" minus the chance it should have given. For a real neighbour the right chance is 100%, which is 1: error = ${n4(pos.sg)} − 1 = <span class="mono">${n4(pos.err)}</span>.`,
+      `2. error × u is the loss gradient for h: how sensitive the loss is to each coordinate.`,
+      `3. error × h is the loss gradient for u. The update subtracts these gradients after scaling by the learning rate.`],
+      [`The error says which way the score should move and how strongly. For a real neighbour it's always negative, which means "raise this score".`,
+       `Its size depends on how wrong the model was. At 50% the error is −0.5. If the model had already said 99%, it would be only −0.01 and almost nothing would change.`],
+      [[`Why multiply by u to get the change for h?`,[`The score is ${[...Array(Math.min(D,3))].map((_,i)=>`h${i}·u${i}`).join(' + ')}${D>3?' + …':''}. If h0 goes up by a tiny amount, the score goes up by u0 times that amount. So u tells us how strongly each number of h moves the score. In the same way, h tells us how strongly each number of u moves it. Multiplying by the error scales this by how wrong the model was.`]],
+       [`Where does σ(score) − 1 come from?`,[`It's the slope of the loss −log σ(score) with respect to the score. Section 3 below derives it step by step.`]]])+
     vecPair([['error × u',pos.gh,'var(--center)'],['error × h',pos.gu,'var(--target)']],Math.max(...pos.gh.map(Math.abs),...pos.gu.map(Math.abs)))+
-    `<div class="math">gradient for h = ${n4(pos.err)} × [${vecTxt(pos.u)}] = [${vecTxt(pos.gh,5)}]
-gradient for u = ${n4(pos.err)} × [${vecTxt(pos.h)}] = [${vecTxt(pos.gu,5)}]</div>`;
+    `<div class="math">change for h = ${n4(pos.err)} × [${vecTxt(pos.u)}] = [${vecTxt(pos.gh,5)}]
+change for u = ${n4(pos.err)} × [${vecTxt(pos.h)}] = [${vecTxt(pos.gu,5)}]</div>`;
   case "pupd":{
     const sA=dot(pos.hA,pos.uA), m=Math.max(...[pos.h,pos.u,pos.hA,pos.uA].flat().map(Math.abs));
-    return pair+SUM(`Take a small step (LEARNING_RATE = ${LR}) against both gradients. <span class="c-center">${cw}</span>'s row of E moves toward <span class="c-target">${xw}</span>'s row of W, and ${xw}'s row moves toward ${cw}'s.`,
-      `The score for (${cw}, ${xw}) went from <span class="mono">${n5(pos.score)}</span> to <span class="mono">${n5(sA)}</span>, so the model now says yes a little more: ${pct(pos.sg)} → ${pct(sigmoid(sA))}. Only these two rows changed; the other ${2*NV-2} rows are untouched.`)+
+    return pair+SUM([`Each number gets updated as new = old − LEARNING_RATE × error × (the matching number of the other row).`,
+      `For <span class="c-center">${poss(cw)}</span> row of E: new = h − ${LR} × ${par(pos.err)} × u.`,
+      `For <span class="c-target">${poss(xw)}</span> row of W: new = u − ${LR} × ${par(pos.err)} × h.`,
+      `The error is negative, so "minus a negative" adds a multiple of u to h and a multiple of the old h to u. This aims to raise their dot product locally.`],
+      [`For this update the score changes <span class="mono">${n5(pos.score)}</span> → <span class="mono">${n5(sA)}</span>, and the positive-label output changes ${pct(pos.sg)} → ${pct(sigmoid(sA))}. Large learning rates need not improve the result.`,
+       `Only these 2 rows changed. The other ${2*NV-2} rows of E and W are untouched.`],
+      [[`Why subtract?`,[`error × u is the direction in which changing h would make the loss bigger. We want the loss smaller, so we move h the opposite way. The same goes for error × h and u.`]],
+       [`Why such a small change?`,[`LEARNING_RATE = ${LR} keeps every step small. One pair should only nudge the numbers. The pattern comes from thousands of pairs all nudging the same way.`]]])+
     vecPair([[`E[${cw}] before`,pos.h,'var(--center)'],[`E[${cw}] after`,pos.hA,'var(--center)'],[`W[${xw}] before`,pos.u,'var(--target)'],[`W[${xw}] after`,pos.uA,'var(--target)']],m);}
   case "sample":{
-    const P=RUN.NT.P;
-    return pair+SUM(`Draw ${K} wrong words at random, using the chances in the chart (count<sup>0.75</sup>, scaled to add up to 1). If the draw is the real context word (<span class="c-target">${xw}</span>), throw it away and draw again. This time: ${s.draws.map(d=>d.w===x?`<s>${V[d.w]}</s>`:`<b>${V[d.w]}</b>`).join(', ')}.`,
-      `The wrong words give the model something to say "no" to. Without them it could just make every score huge and say "yes" to everything. Frequent words like ${V[P.indexOf(Math.max(...P))]} are drawn more often, but the 0.75 power gives rare words a slightly better chance than their raw count would.`)+
-    `<div><h3>chance of being drawn as a wrong word <span class="shape">(${NV},)</span></h3><div class="viz">${barsSVG(P,{target:x,min:0,label:"negative sampling probabilities"})}</div></div>
-    <div class="math">${s.draws.map((d,i)=>`draw ${i+1}: random number ${d.u.toFixed(6)} → ${V[d.w]}${d.w===x?'   (the real context word: rejected, draw again)':''}`).join('\n')}</div>`;}
+    const T=RUN.NT, P=T.P, big=T.counts.indexOf(Math.max(...T.counts)), small=T.counts.indexOf(Math.min(...T.counts));
+    const even=T.counts[big]===T.counts[small];
+    return pair+SUM([`Now we pick the ${K} random words. Think of a hat with tickets in it. Every word has tickets, and words that appear more often in the sentences have more of them. The chart shows each word's share of the tickets.`,
+      `To draw, the code takes a random number between 0 and 1. Each word owns a slice of the range 0 to 1, as big as its share, and the number lands in one slice (section 3 lists the slices). That word is drawn.`,
+      `If the drawn word is <span class="c-target">${xw}</span>, it's thrown back and we draw again, because ${xw} is the real neighbour in this pair. We keep going until we have ${K} words.`,
+      `This time: ${s.draws.map(d=>d.w===x?`<s>${V[d.w]}</s> (thrown back)`:`<b>${V[d.w]}</b>`).join(', ')}.`],
+      [`These are the words the model will be told "no" about. Without them, it could just say "yes" to everything.`,
+       `We avoid scoring every candidate. Drawing from the vocabulary-sized distribution still has overhead, especially in the Python teaching script's np.random.choice calls.`],
+      [even?[`Why does every word have the same chance here?`,[`Every word appears the same number of times (${T.counts[big]}) in these sentences, so they all get the same number of tickets.`]]:
+        [`Why do some words get more tickets?`,[`${V[big]} appears ${T.counts[big]} times and ${V[small]} appears ${T.counts[small]} times. Common words sit near almost everything, so it matters most that the model learns they are not a neighbour of every word. So they're asked about more often.`]],
+       even?null:[`What does the 0.75 do?`,[`Without it, ${V[big]} would get ${T.counts[big]} / ${T.counts[small]} = ${(T.counts[big]/T.counts[small]).toFixed(2)} times as many tickets as ${V[small]}. With it, the tickets are ${T.counts[big]}<sup>0.75</sup> = ${n4(T.pw[big])} against ${T.counts[small]}<sup>0.75</sup> = ${n4(T.pw[small])}, which is ${(P[big]/P[small]).toFixed(2)} times as many. Common words still get more, but rare words get a fairer share. 0.75 is simply the value the Word2Vec authors found worked best.`]],
+       [`Can the same word be drawn twice for one pair?`,[`Yes. Each draw is separate, so a word can come up twice. Then it gets pushed away from ${cw} twice.`]],
+       [`Can a drawn word be a real neighbour of ${cw}?`,[`Yes. Only ${xw} is thrown back. ${poss(cw)} observed neighbours are ${wl(nbs)}. ${realNegs.length?`This time ${wl(realNegs)} ${realNegs.length>1?'were':'was'} drawn and receives a noise label as well as positive labels elsewhere.`:`This time none of them was drawn.`} The "pick pair" step explains this overlap.`]]])+
+    `<div><h3>chance of being drawn <span class="shape">(${NV},)</span></h3><div class="viz">${barsSVG(P,{target:x,min:0,label:"negative sampling probabilities"})}</div></div>
+    <div class="math">${s.draws.map((d,i)=>`draw ${i+1}: random number ${d.u.toFixed(6)} → ${V[d.w]}${d.w===x?'   (the real neighbour: thrown back, draw again)':''}`).join('\n')}</div>`;}
   case "end":{
-    const L=RUN.losses[S.ep];
+    const L=RUN.losses[S.ep], prev=S.ep>0?RUN.losses[S.ep-1]:null, base=(K+1)*Math.LN2;
     return `<div class="pairline"><span class="big">End of epoch ${S.ep+1}</span></div>
-    ${SUM(`Average this epoch's loss over the ${NP} real pairs and save it. That's one point on the loss chart.`,`Each pair added ${K+1} terms (1 real + ${K} wrong), so a model that knows nothing scores about ${K+1} × ln 2 = ${((K+1)*Math.LN2).toFixed(3)} per pair. Lower than that means it's learning.`)}
+    ${SUM([`All ${NP} pairs are done. We divide <code>total_loss</code> by ${NP} to get the average cost per pair: ${s.total.toFixed(4)} / ${NP} = <span class="mono">${L.toFixed(4)}</span>. That's one dot on the loss chart.`],
+      [`The average tells us whether the model is improving. Each pair added ${K+1} parts. A model that knows nothing gives 50% to every question, and each 50% answer costs log 2 = 0.693. So "knows nothing" costs ${K+1} × 0.693 = ${base.toFixed(3)} per pair, and anything below that means it's learning.`,
+       prev!=null?`Compared with the previous epoch: ${prev.toFixed(4)} → ${L.toFixed(4)} (${L<prev?'down':'up'} ${Math.abs(L-prev).toFixed(4)}).`:''])}
     <div class="math">losses[${S.ep}] = ${s.total.toFixed(4)} / ${NP} = ${L.toFixed(4)}</div>
     <div class="math">${RUN.losses.slice(0,EPOCHS).map((l,i)=>`epoch ${i+1}: ${i<=S.ep?l.toFixed(4):'  …   '}`).join('\n')}</div>`;}
   }
@@ -846,7 +1004,7 @@ function curveSVG(fn,sx,{ymax,label,ylabel}){
   return s+'</svg>';
 }
 const sigmoidMini=(sc,lbl)=>curveSVG(sigmoid,sc,{ymax:1,label:'sigmoid curve',ylabel:lbl});
-const lossMini=(sc,positive)=>curveSVG(positive?v=>logaddexp0(-v):v=>logaddexp0(v),sc,{ymax:6,label:'loss curve',ylabel:positive?'−ln σ(s)':'−ln(1 − σ(s))'});
+const lossMini=(sc,positive)=>curveSVG(positive?v=>logaddexp0(-v):v=>logaddexp0(v),sc,{ymax:6,label:'loss curve',ylabel:positive?'−log σ(s)':'−log(1 − σ(s))'});
 
 // ---------- run-wide charts ----------
 function niceStep(range){const r=range/5,p=Math.pow(10,Math.floor(Math.log10(r)));for(const m of[1,2,2.5,5,10])if(m*p>=r)return m*p;return 10*p}
@@ -866,7 +1024,7 @@ function lossChart(){
   s+=`<text x="${(l+W)/2}" y="${H-4}" text-anchor="middle">epochs completed</text>`;
   const cur=idx();
   if(!ext){const every=Math.max(1,Math.ceil(RUN.steps.length/1500));RUN.steps.forEach((q,i)=>{if(i>cur||i%every)return;if(q.loss<ymin||q.loss>ymax)return;s+=`<circle cx="${xs((i+1)/NP).toFixed(1)}" cy="${ys(q.loss).toFixed(1)}" r="1.4" fill="var(--faint)" opacity=".55"/>`});}
-  const u=(K+1)*Math.LN2;if(u>=ymin&&u<=ymax)s+=`<line x1="${l}" x2="${W-r}" y1="${ys(u)}" y2="${ys(u)}" stroke="var(--muted)" stroke-dasharray="4 4"/><text x="${W-r}" y="${ys(u)-5}" text-anchor="end" class="lbl">no idea yet: (K+1) ln 2 = ${u.toFixed(4)}</text>`;
+  const u=(K+1)*Math.LN2;if(u>=ymin&&u<=ymax)s+=`<line x1="${l}" x2="${W-r}" y1="${ys(u)}" y2="${ys(u)}" stroke="var(--muted)" stroke-dasharray="4 4"/><text x="${W-r}" y="${ys(u)-5}" text-anchor="end" class="lbl">no idea yet: (K+1) log 2 = ${u.toFixed(4)}</text>`;
   if(false) s+=`<line x1="${l}" x2="${W-r}" y1="${ys(RUN.floor)}" y2="${ys(RUN.floor)}" stroke="var(--g-pets)" stroke-dasharray="4 4"/><text x="${W-r}" y="${ys(RUN.floor)+13}" text-anchor="end" style="fill:var(--g-pets)">best possible ≈ ${RUN.floor.toFixed(2)}</text>`;
   if(ext){let d='';RUN.losses.forEach((v,i)=>d+=(i?'L':'M')+xs(i+1)+','+ys(v));s+=`<path d="${d}" fill="none" stroke="var(--faint)" stroke-width="1.5" stroke-dasharray="3 3"/>`}
   const done=S.ph==="end"?S.ep+1:S.ep;
@@ -963,34 +1121,57 @@ function dimTable(cols,{res=null}={}){
   if(res)t+=`<tr class="res"><th class="rl">${res[0]}</th>${cols.map((_,j)=>`<td>${res[1][j]??''}</td>`).join('')}</tr>`;
   return `<div class="scroll" style="align-self:flex-start;max-width:100%">${t}</tbody></table></div>`;
 }
-const sigTeX=(s,eq='=')=>String.raw`\sigma(${n4(s)}) ${eq} \frac{1}{1 + e^{${n4(-s)}}} = \frac{1}{1 + ${n5(Math.exp(-s))}} = ${n5(sigmoid(s))}`;
+const sigTeX=(s,eq='=')=>{const clipped=clamp(s,-15,15),arg=clipped===s?n4(s):String.raw`\operatorname{clip}(${n4(s)},-15,15)`;return String.raw`\sigma(${arg}) ${eq} \frac{1}{1 + e^{${n4(-clipped)}}} = \frac{1}{1 + ${n5(Math.exp(-clipped))}} = ${n5(sigmoid(s))}`};
+function derivationGraphs(){
+  const s=st(),negative=isNeg(S.ph),q=negative?s.neg[+S.ph.slice(3)]:s.pos,score=q.score;
+  const probability=v=>v>=0?1/(1+Math.exp(-v)):Math.exp(v)/(1+Math.exp(v));
+  if(S.ph==='pscore')return MathGraphs.slope({
+    title:'Where the sigmoid is sensitive, and where it flattens',
+    context:'The mathematical sigmoid changes fastest near score 0, where its slope is 0.25. At high confidence it flattens. The plotted sigmoid is unclipped; the implementation clips inputs outside [-15, 15], differing by less than 0.00000031 in probability.',
+    x:score,xMin:Math.min(-6,score-2),xMax:Math.max(6,score+2),xLabel:'pair score',yLabel:'probability',
+    curves:[{label:'Positive-label probability',fn:probability,slope:probability(score)*(1-probability(score))}]
+  });
+  if(S.ph==='ploss'||S.ph==='perr'||negative){
+    const p=probability(score);
+    return MathGraphs.slope({
+      title:negative?'A noise label reverses the learning signal':'Same score, opposite labels, opposite slopes',
+      context:`Both curves use the selected ${negative?'noise':'observed'} pair’s current score. Label 1 rewards a higher score; label 0 rewards a lower score. Their mathematical slopes are sigmoid(s) - 1 and sigmoid(s). The code approximates these with a clipped sigmoid outside [-15, 15]; losses remain unclipped.`,
+      x:score,xMin:Math.min(-5,score-2),xMax:Math.max(5,score+2),xLabel:'pair score',yLabel:'loss',
+      curves:[
+        {label:'Observed pair: label 1',fn:v=>logaddexp0(-v),slope:p-1},
+        {label:'Noise sample: label 0',fn:v=>logaddexp0(v),slope:p}
+      ]
+    });
+  }
+  return '';
+}
 function workedHTML(){
   const s=st(), {c,x,pos,neg,Wb,Eb,Wa,Ea}=s, cw=V[c], xw=V[x];
   const head=(t,sub,tex)=>`<div class="wk-head"><h2>${t}</h2>${sub?`<span class="note">${sub}</span>`:''}</div>${tex?`<div class="formula">\\[${tex}\\]</div>`:''}`;
   if(isNeg(S.ph)){
     const i=+S.ph.slice(3), q=neg[i], nw=V[q.n], sA=dot(q.hA,q.uA);
-    const prevNote=i===0?`the positive update on lines 51–52`:`the positive update and wrong word${i>1?'s':''} ${[...Array(i)].map((_,k)=>k+1).join(', ')}`;
-    return head(`Wrong word ${i+1} of ${K}: ${nw}`,"lines 56–62",String.raw`L^{-} = -\ln\bigl(1-\sigma(s)\bigr) = \ln\bigl(1+e^{s}\bigr), \qquad \frac{\partial L^{-}}{\partial s} = \sigma(s), \qquad s = h\cdot u_{${tw(nw)}}`)+
-    GL([[String.raw`u_{${tw(nw)}}`,`${nw}'s row of W, <code>W[neg]</code> (line 57).`],
-      [String.raw`h`,`${cw}'s row of E, read again on line 56. It already includes ${prevNote}, so it's not the same h as on line 46.`],
-      [String.raw`s`,`the score h · u for this wrong word (line 58).`],
+    const prevNote=i===0?`the positive update on lines 51–52`:`the positive update and random word${i>1?'s':''} ${[...Array(i)].map((_,k)=>k+1).join(', ')}`;
+    return head(`Random word ${i+1} of ${K}: ${nw}`,"lines 56–62",String.raw`L^{-} = -\log\bigl(1-\sigma(s)\bigr) = \log\bigl(1+e^{s}\bigr), \qquad \frac{\partial L^{-}}{\partial s} = \sigma(s), \qquad s = h\cdot u_{${tw(nw)}}`)+
+    GL([[String.raw`u_{${tw(nw)}}`,`${poss(nw)} row of W, <code>W[neg]</code> (line 57).`],
+      [String.raw`h`,`${poss(cw)} row of E, read again on line 56. It already includes ${prevNote}, so it's not the same h as on line 46.`],
+      [String.raw`s`,`the score h · u for this random word (line 58).`],
       [String.raw`1-\sigma(s)`,`the chance the model gives to the right answer, "no, not a neighbour".`],
-      [String.raw`L^{-}`,`this wrong word's loss term, <code>np.logaddexp(0, score)</code> (line 59).`],
+      [String.raw`L^{-}`,`this random word's loss term, <code>np.logaddexp(0, score)</code> (line 59).`],
       [String.raw`\delta`,String.raw`\(\partial L^-/\partial s = \sigma(s)\), the <code>error</code> on line 60. Always positive: "lower this score".`]])+
     DV("1 · Where the loss and its slope come from",[
-      [String.raw`For a wrong word the right answer is "no", so the loss is −ln of the chance of "no", which is \(1-\sigma(s)\). Rewrite \(1-\sigma(s)\) by putting both terms over \(1+e^{-s}\):`,String.raw`1-\sigma(s) = 1-\frac{1}{1+e^{-s}} = \frac{e^{-s}}{1+e^{-s}} = \frac{1}{e^{s}+1} = \sigma(-s)`],
-      [String.raw`So the loss is \(-\ln\sigma(-s)\), and the same steps as for the real pair turn it into \(\ln(1+e^{s})\). That is \(\ln(e^0+e^{s})\), which is <code>np.logaddexp(0, score)</code>:`,String.raw`L^{-} = -\ln\frac{1}{1+e^{s}} = \ln\bigl(1+e^{s}\bigr)`],
-      [String.raw`Differentiate with the chain rule (\(\tfrac{d}{du}\ln u = \tfrac1u\), and the derivative of \(1+e^{s}\) is \(e^{s}\)):`,String.raw`\frac{\partial L^{-}}{\partial s} = \frac{e^{s}}{1+e^{s}} = \frac{1}{e^{-s}+1} = \sigma(s)`],
-      [String.raw`So the error for a wrong word is just the "yes" chance the model wrongly gave it. 0 would mean "already sure it's not a neighbour, nothing to fix".`],
+      [String.raw`For a random word the right answer is "no", so the loss is −log of the chance of "no", which is \(1-\sigma(s)\). Rewrite \(1-\sigma(s)\) by putting both terms over \(1+e^{-s}\):`,String.raw`1-\sigma(s) = 1-\frac{1}{1+e^{-s}} = \frac{e^{-s}}{1+e^{-s}} = \frac{1}{e^{s}+1} = \sigma(-s)`],
+      [String.raw`So the loss is \(-\log\sigma(-s)\), and the same steps as for the real pair turn it into \(\log(1+e^{s})\). That is \(\log(e^0+e^{s})\), which is <code>np.logaddexp(0, score)</code>:`,String.raw`L^{-} = -\log\frac{1}{1+e^{s}} = \log\bigl(1+e^{s}\bigr)`],
+      [String.raw`Differentiate with the chain rule (\(\tfrac{d}{du}\log u = \tfrac1u\), and the derivative of \(1+e^{s}\) is \(e^{s}\)):`,String.raw`\frac{\partial L^{-}}{\partial s} = \frac{e^{s}}{1+e^{s}} = \frac{1}{e^{-s}+1} = \sigma(s)`],
+      [String.raw`So the error for a random word is just the "yes" chance the model wrongly gave it. 0 would mean "already sure it's not a neighbour, nothing to fix".`],
       [String.raw`The score is a dot product, so as before \(\partial s/\partial h_i = u_i\) and \(\partial s/\partial u_i = h_i\):`,String.raw`\nabla_h L^{-} = \sigma(s)\,u, \qquad \nabla_u L^{-} = \sigma(s)\,h`]])+
     `<h3>2 · The score</h3><div class="cards">${dotWork({title:`s = h · W[${nw}]`,rows:[...Array(D)].map((_,k)=>[`${k}`,q.h[k],q.u[k]]),aLbl:'h[i]',bLbl:`W[${nw}, i]`,res:q.score,kind:'key'})}</div>`+
-    TB(String.raw`\begin{aligned} ${sigTeX(q.score,'&=')} \\ L^{-} &= \ln\bigl(1 + e^{${n4(q.score)}}\bigr) = \ln(1 + ${n5(Math.exp(q.score))}) = \boxed{${n5(q.loss)}} \\ \delta &= \sigma(s) = \boxed{${n5(q.err)}} \end{aligned}`)+
+    TB(String.raw`\begin{aligned} ${sigTeX(q.score,'&=')} \\ L^{-} &= \log\bigl(1 + e^{${n4(q.score)}}\bigr) = \log(1 + ${n5(Math.exp(q.score))}) = \boxed{${n5(q.loss)}} \\ \delta &= \sigma(s) = \boxed{${n5(q.err)}} \end{aligned}`)+
     `<h3>3 · Gradients and the update (η = ${LR})</h3>`+
     dimTable([['h[i]',q.h],[`u[i] = W[${nw}, i]`,q.u],['δ × u[i]',q.gh],['δ × h[i]',q.gu],[`E[${cw}, i] after`,q.hA,n5,true],[`W[${nw}, i] after`,q.uA,n5,true]])+
     TB(String.raw`\begin{aligned} E_{${tw(cw)}} &\leftarrow h - ${LR}\cdot ${n4(q.err)}\cdot u \\ W_{${tw(nw)}} &\leftarrow u - ${LR}\cdot ${n4(q.err)}\cdot h \\ s \text{ after both steps} &= ${n5(sA)} \quad (\text{was } ${n5(q.score)}) \end{aligned}`)+
-    callouts([`The score went down by ${n5(q.score-sA)}, so the model now says "yes" to ${nw} a little less: ${pct(q.sg)} → ${pct(sigmoid(sA))}.`,
-      RUN.order[0].some(([a,b])=>a===c&&b===q.n)?`${nw} really is a neighbour of ${cw} in another sentence, so this push is "wrong". That happens with random draws; the real pairs still win because each of them comes up every epoch.`:`${nw} never appears next to ${cw}, so "no" is the right answer and this push is helpful.`,
-      i<K-1?`Next: wrong word ${i+2}.`:`That was the last wrong word. This pair added ${K+1} loss terms: ${[pos.loss,...neg.map(q=>q.loss)].map(n4).join(' + ')} = ${n4(s.loss)}.`]);
+    callouts([`The score changes by ${n5(sA-q.score)}, and the positive-label output changes ${pct(q.sg)} → ${pct(sigmoid(sA))}. The gradient is a local guide; large finite steps can overshoot.`,
+      RUN.order[0].some(([a,b])=>a===c&&b===q.n)?`${nw} really is a neighbour of ${cw} (in "${sentWith(c,q.n)}"), so this push goes the wrong way. The draw never looks at the sentences, so this can happen. The correct "yes" for (${cw}, ${nw}) comes up every epoch and outweighs it (see the questions on the "pick pair" step).`:`${nw} never appears next to ${cw}, so "no" is the right answer and this push is helpful.`,
+      i<K-1?`Next: random word ${i+2}.`:`That was the last random word. This pair added ${K+1} loss terms: ${[pos.loss,...neg.map(q=>q.loss)].map(n4).join(' + ')} = ${n4(s.loss)}.`]);
   }
   switch(S.ph){
   case "shuffle":{
@@ -998,7 +1179,7 @@ function workedHTML(){
     return head("Shuffle","np.random.shuffle(pairs) · total_loss = 0")+
     `<p class="explain">No arithmetic yet. The ${NP} pairs are put in a new random order, and <code>total_loss</code> goes back to 0. Here is the complete order this epoch will use:</p>
     <div class="pairgrid">${ord.map(([a,b],i)=>`<span class="${i===0?'first':''}"><i>${i+1}</i> (${V[a]}, ${V[b]})</span>`).join('')}</div>
-    ${callouts([`Only the order changes. The same ${NP} pairs are used every epoch.`,`The shuffle and the wrong-word draws come from the same random stream seeded with 42, so the whole run is the same every time.`])}`;}
+    ${callouts([`Only the order changes. The same ${NP} pairs are used every epoch.`,`The shuffle and the random-word draws come from the same random stream seeded with 42, so the whole run is the same every time.`])}`;}
   case "pair":
     return head("Pick the pair","for center, context in pairs")+
     `<div class="math">(center, context) = (${c}, ${x})
@@ -1007,7 +1188,7 @@ context = ${x}  → word_to_id["${xw}"]   → selects <span class="c-target">row
     ${callouts([`The two numbers are just indexes. ${c} picks which word's embedding to read, and ${x} picks which row of W to compare it with.`,`In chapter 01, ${x} picked one of ${NV} probabilities. Here it picks one of the ${K+1} words the model will check.`])}`;
   case "h":
     return head("Lookup: h = E[center], u = W[context]","lines 46–47",String.raw`h = E_{${c},:}\ (\text{${cw}}), \qquad u = W_{${x},:}\ (\text{${xw}})`)+
-    GL([[String.raw`E`,`the embeddings, one row per word (${NV}×${D}). The rows of E are what we keep at the end.`],[String.raw`W`,`the second table, also one row per word (${NV}×${D}). A word's row in W is used when it's the word being checked.`],[String.raw`h`,`${cw}'s row of E: <code>E[center].copy()</code>.`],[String.raw`u`,`${xw}'s row of W: <code>W[context].copy()</code>.`]])+
+    GL([[String.raw`E`,`the embeddings, one row per word (${NV}×${D}). The rows of E are what we keep at the end.`],[String.raw`W`,`the second table, also one row per word (${NV}×${D}). A word's row in W is used when it's the word being checked.`],[String.raw`h`,`${poss(cw)} row of E: <code>E[center].copy()</code>.`],[String.raw`u`,`${poss(xw)} row of W: <code>W[context].copy()</code>.`]])+
     dimTable([[`h = E[${cw}, i]`,pos.h,n5,true],[`u = W[${xw}, i]`,pos.u,n5,true]])+
     callouts([`<code>.copy()</code> matters: lines 51–52 change E[center] and W[context], and both updates need the values from before either change.`,
       `In chapter 01 W was ${D}×${NV} (one column per word) and every column was used. Here W is stored as ${NV}×${D} so one word's vector is one row, and only ${K+1} rows are used per pair.`]);
@@ -1020,24 +1201,24 @@ context = ${x}  → word_to_id["${xw}"]   → selects <span class="c-target">row
       String.raw`A useful fact for later: \(\sigma(-s) = 1 - \sigma(s)\). Flipping the sign of the score swaps "yes" and "no".`,
       `Chapter 01 needed all ${NV} scores to get one probability (softmax). The sigmoid needs only this one score.`]);
   case "ploss":
-    return head("total_loss += np.logaddexp(0, -score)","line 49",String.raw`L^{+} = -\ln\sigma(s) = \ln\bigl(1+e^{-s}\bigr)`)+
-    GL([[String.raw`L^{+}`,`the loss for the real pair. Lower is better; 0 means the model said "yes" with 100%.`],[String.raw`\sigma(s)`,`the chance of "yes" from line 48, here ${n5(pos.sg)}.`],[String.raw`\operatorname{logaddexp}(a,b)`,String.raw`NumPy's \(\ln(e^{a}+e^{b})\), computed without overflow.`],[String.raw`\ln`,`natural logarithm, <code>np.log</code>.`]])+
-    DV("1 · From −ln σ(s) to logaddexp(0, −score)",[
-      [String.raw`The right answer is "yes", so the loss is −ln of the chance of yes (the same idea as chapter 01's \(-\ln p_x\)):`,String.raw`L^{+} = -\ln\sigma(s) = -\ln\frac{1}{1+e^{-s}}`],
-      [String.raw`Use \(-\ln\frac{1}{a} = \ln a\):`,String.raw`L^{+} = \ln\bigl(1+e^{-s}\bigr)`],
-      [String.raw`Write 1 as \(e^{0}\). Then it's exactly \(\ln(e^{a}+e^{b})\) with \(a=0,\ b=-s\), which is what <code>np.logaddexp(0, -score)</code> computes. It gives the same number as <code>-np.log(sigmoid(score))</code>, but never takes the log of 0 when the score is very negative.`,String.raw`L^{+} = \ln\bigl(e^{0}+e^{-s}\bigr) = \operatorname{logaddexp}(0,\,-s)`]])+
-    TB(String.raw`\begin{aligned} L^{+} &= \ln\bigl(1 + e^{${n4(-pos.score)}}\bigr) = \ln(1 + ${n5(Math.exp(-pos.score))}) = \ln(${n5(1+Math.exp(-pos.score))}) = \boxed{${n5(pos.loss)}} \\ \text{check: } -\ln\sigma(s) &= -\ln(${n5(pos.sg)}) = ${n5(-Math.log(pos.sg))} \\[4pt] \text{total_loss} &= ${n4(s.runBefore)} + ${n4(pos.loss)} = ${n4(s.runBefore+pos.loss)} \end{aligned}`)+
-    callouts([`Reference points: σ = 1 → loss 0. σ = 0.5 (score 0) → loss ln 2 = 0.6931. That's why every term starts near 0.693 when the weights are tiny.`,
-      `The ${K} wrong words each add their own term on line 59, so the full loss for this pair is \\(L = L^{+} + \\sum_{k=1}^{${K}} L^{-}_k\\).`]);
+    return head("total_loss += np.logaddexp(0, -score)","line 49",String.raw`L^{+} = -\log\sigma(s) = \log\bigl(1+e^{-s}\bigr)`)+
+    GL([[String.raw`L^{+}`,`the loss for the real pair. Lower is better; 0 means the model said "yes" with 100%.`],[String.raw`\sigma(s)`,`the chance of "yes" from line 48, here ${n5(pos.sg)}.`],[String.raw`\operatorname{logaddexp}(a,b)`,String.raw`NumPy's \(\log(e^{a}+e^{b})\), computed without overflow.`],[String.raw`\log`,`natural logarithm, <code>np.log</code>.`]])+
+    DV("1 · From −log σ(s) to logaddexp(0, −score)",[
+      [String.raw`The right answer is "yes", so the loss is −log of the chance of yes (the same idea as chapter 01's \(-\log p_x\)):`,String.raw`L^{+} = -\log\sigma(s) = -\log\frac{1}{1+e^{-s}}`],
+      [String.raw`Use \(-\log\frac{1}{a} = \log a\):`,String.raw`L^{+} = \log\bigl(1+e^{-s}\bigr)`],
+      [String.raw`Write 1 as \(e^{0}\). Then it's exactly \(\log(e^{a}+e^{b})\) with \(a=0,\ b=-s\), which is what <code>np.logaddexp(0, -score)</code> computes. It gives the same number as <code>-np.log(sigmoid(score))</code>, but never takes the log of 0 when the score is very negative.`,String.raw`L^{+} = \log\bigl(e^{0}+e^{-s}\bigr) = \operatorname{logaddexp}(0,\,-s)`]])+
+    TB(String.raw`\begin{aligned} L^{+} &= \log\bigl(1 + e^{${n4(-pos.score)}}\bigr) = \log(1 + ${n5(Math.exp(-pos.score))}) = \log(${n5(1+Math.exp(-pos.score))}) = \boxed{${n5(pos.loss)}} \\ \text{check: } -\log\sigma(s) &= -\log(${n5(pos.sg)}) = ${n5(-Math.log(pos.sg))} \\[4pt] \text{total_loss} &= ${n4(s.runBefore)} + ${n4(pos.loss)} = ${n4(s.runBefore+pos.loss)} \end{aligned}`)+
+    callouts([`Reference points: σ = 1 → loss 0. σ = 0.5 (score 0) → loss log 2 = 0.6931. That's why every term starts near 0.693 when the weights are tiny.`,
+      `The ${K} random words each add their own term on line 59, so the full loss for this pair is \\(L = L^{+} + \\sum_{k=1}^{${K}} L^{-}_k\\).`]);
   case "perr":
     return head("error = sigmoid(score) − 1","line 50",String.raw`\delta = \frac{\partial L^{+}}{\partial s} = \sigma(s) - 1, \qquad \nabla_h L^{+} = \delta\,u, \qquad \nabla_u L^{+} = \delta\,h`)+
     GL([[String.raw`\delta`,`the error, <code>error</code> on line 50: how the loss reacts to a tiny nudge of the score.`],[String.raw`\sigma'(s)`,`the slope of the sigmoid at s.`],[String.raw`\nabla_h L^{+}`,`how the loss reacts to each number of h. Line 51 uses <code>error * u</code>.`],[String.raw`\nabla_u L^{+}`,`how the loss reacts to each number of u. Line 52 uses <code>error * h</code>.`]])+
     DV("1 · The slope of the sigmoid",[
       [String.raw`Write the sigmoid as a power so the chain rule applies:`,String.raw`\sigma(s) = \bigl(1+e^{-s}\bigr)^{-1}`],
       [String.raw`Outer part: the derivative of \(g^{-1}\) is \(-g^{-2}\). Inner part: the derivative of \(1+e^{-s}\) is \(-e^{-s}\). Multiply them:`,String.raw`\sigma'(s) = -\bigl(1+e^{-s}\bigr)^{-2}\cdot\bigl(-e^{-s}\bigr) = \frac{e^{-s}}{\bigl(1+e^{-s}\bigr)^{2}}`],
-      [String.raw`Split it into two fractions. The first is \(\sigma(s)\), and the second is \(1-\sigma(s)\) (shown on the wrong-word step):`,String.raw`\sigma'(s) = \frac{1}{1+e^{-s}}\cdot\frac{e^{-s}}{1+e^{-s}} = \sigma(s)\,\bigl(1-\sigma(s)\bigr)`]])+
+      [String.raw`Split it into two fractions. The first is \(\sigma(s)\), and the second is \(1-\sigma(s)\) (shown on the random-word step):`,String.raw`\sigma'(s) = \frac{1}{1+e^{-s}}\cdot\frac{e^{-s}}{1+e^{-s}} = \sigma(s)\,\bigl(1-\sigma(s)\bigr)`]])+
     DV("2 · From the loss to the error",[
-      [String.raw`The loss is \(-\ln u\) with \(u = \sigma(s)\). The derivative of \(-\ln u\) is \(-\tfrac1u\) (derived in chapter 01). Chain rule:`,String.raw`\frac{\partial L^{+}}{\partial s} = -\frac{1}{\sigma(s)}\cdot\sigma'(s) = -\frac{1}{\sigma(s)}\cdot\sigma(s)\bigl(1-\sigma(s)\bigr) = -\bigl(1-\sigma(s)\bigr) = \boxed{\sigma(s)-1}`],
+      [String.raw`The loss is \(-\log u\) with \(u = \sigma(s)\). The derivative of \(-\log u\) is \(-\tfrac1u\) (derived in chapter 01). Chain rule:`,String.raw`\frac{\partial L^{+}}{\partial s} = -\frac{1}{\sigma(s)}\cdot\sigma'(s) = -\frac{1}{\sigma(s)}\cdot\sigma(s)\bigl(1-\sigma(s)\bigr) = -\bigl(1-\sigma(s)\bigr) = \boxed{\sigma(s)-1}`],
       [String.raw`That's "chance given minus chance it should have been" (1 for a real pair), the same pattern as chapter 01's \(p - y\).`],
       [String.raw`The score is \(s = \sum_i h_i u_i\). Nudging \(h_i\) changes s by \(u_i\), and nudging \(u_i\) changes it by \(h_i\). Chain rule once more:`,String.raw`\frac{\partial L^{+}}{\partial h_i} = \delta\,u_i, \qquad \frac{\partial L^{+}}{\partial u_i} = \delta\,h_i`]])+
     TB(String.raw`\delta = \sigma(s) - 1 = ${n5(pos.sg)} - 1 = \boxed{${n5(pos.err)}}`)+
@@ -1054,22 +1235,22 @@ context = ${x}  → word_to_id["${xw}"]   → selects <span class="c-target">row
   case "sample":{
     const T=RUN.NT, lo=T.cdf.map((v,i)=>i?T.cdf[i-1]:0), raw=T.counts.map(v=>v/T.counts.reduce((a,b)=>a+b,0));
     const big=T.counts.indexOf(Math.max(...T.counts)), small=T.counts.indexOf(Math.min(...T.counts));
-    const tab=rowTable(['word','count','count<sup>0.75</sup>','share of words','P (drawn as wrong word)','interval in [0, 1)'],V.map((w,j)=>({cls:j===x?'ctxrow':'',cells:[w+(j===x?' ★':''),String(T.counts[j]),n4(T.pw[j]),n4(raw[j]),n4(T.P[j]),`[${n4(lo[j])}, ${n4(T.cdf[j])})`],tdc:[,'','','',neg.some(q=>q.n===j)?'key':'','']})));
+    const tab=rowTable(['word','count','count<sup>0.75</sup>','share of words','P (drawn as random word)','interval in [0, 1)'],V.map((w,j)=>({cls:j===x?'ctxrow':'',cells:[w+(j===x?' ★':''),String(T.counts[j]),n4(T.pw[j]),n4(raw[j]),n4(T.P[j]),`[${n4(lo[j])}, ${n4(T.cdf[j])})`],tdc:[,'','','',neg.some(q=>q.n===j)?'key':'','']})));
     return head("sample_negatives(context, K)","lines 28–34, called on line 55",String.raw`P(w) = \frac{\text{count}(w)^{0.75}}{\sum_{v} \text{count}(v)^{0.75}}`)+
-    GL([[String.raw`\text{count}(w)`,`how many times word w appears in all the sentences.`],[String.raw`P(w)`,`the chance that one draw picks w: <code>neg_probs</code> on line 26.`],[String.raw`0.75`,`the power Word2Vec uses. Between 0 (every word equally likely) and 1 (exactly by frequency).`],[String.raw`K`,`how many wrong words to keep per real pair, here ${K}.`]])+
+    GL([[String.raw`\text{count}(w)`,`how many times word w appears in all the sentences.`],[String.raw`P(w)`,`the chance that one draw picks w: <code>neg_probs</code> on line 26.`],[String.raw`0.75`,`the power Word2Vec uses. Between 0 (every word equally likely) and 1 (exactly by frequency).`],[String.raw`K`,`how many random words to keep per real pair, here ${K}.`]])+
     `<h3>1 · The table of chances</h3>`+tab+
     TB(String.raw`\sum_v \text{count}(v)^{0.75} = ${n4(T.tot)}, \qquad P(\text{${V[big]}}) = \frac{${T.counts[big]}^{0.75}}{${n4(T.tot)}} = \frac{${n4(T.pw[big])}}{${n4(T.tot)}} = ${n4(T.P[big])}`)+
     (T.counts[big]!==T.counts[small]?callouts([`${V[big]} appears ${T.counts[big]} times and ${V[small]} ${T.counts[small]} times, a ratio of ${(T.counts[big]/T.counts[small]).toFixed(2)}. After the 0.75 power the ratio of their chances is ${(T.P[big]/T.P[small]).toFixed(2)}: frequent words are still preferred, but less strongly.`]):'')+
     `<h3>2 · This pair's draws</h3><p class="note">Each draw takes one random number between 0 and 1 and finds the interval it falls in (that's how <code>np.random.choice(..., p=neg_probs)</code> works). A draw that lands on the real context word (${xw}) is thrown away.</p>`+
     rowTable(['draw','random number','falls in','word','kept?'],s.draws.map((d,i)=>({cls:d.w===x?'dim':'',cells:[String(i+1),d.u.toFixed(6),`[${n4(lo[d.w])}, ${n4(T.cdf[d.w])})`,V[d.w],d.w===x?'no: it is the context word':'yes'],tdc:[,'','','key','']})))+
-    callouts([`The wrong words for this pair: <b>${neg.map(q=>V[q.n]).join(', ')}</b>. The next ${K} steps handle them one by one.`,
+    callouts([`The random words for this pair: <b>${neg.map(q=>V[q.n]).join(', ')}</b>. The next ${K} steps handle them one by one.`,
       `The draw happens after lines 51–52 in the code, but it only uses the random stream, so the result is the same whenever it runs.`]);}
   case "end":{
     const L=RUN.losses[S.ep];
     return head("losses.append(total_loss / len(pairs))","",String.raw`\bar{L}_{\text{epoch ${S.ep+1}}} = \frac{1}{${NP}} \sum_{n=1}^{${NP}} \Bigl(L^{+}_n + \sum_{k=1}^{${K}} L^{-}_{n,k}\Bigr) = \frac{${n4(s.total)}}{${NP}} = ${n4(L)}`)+
     (S.ep>0?TB(String.raw`\bar{L}_{${S.ep+1}} - \bar{L}_{${S.ep}} = ${n4(L)} - ${n4(RUN.losses[S.ep-1])} = ${n4(L-RUN.losses[S.ep-1])}`):'')+
-    TB(String.raw`\text{starting point: every score} \approx 0 \Rightarrow \text{every term} \approx \ln 2 \Rightarrow \bar{L} \approx (${K}+1)\ln 2 = ${n4((K+1)*Math.LN2)}`)+
-    callouts([`This number is one point on the loss chart below.`,`Unlike chapter 01 the loss bounces more from epoch to epoch, because the wrong words are drawn at random every time.`]);}
+    TB(String.raw`\text{starting point: every score} \approx 0 \Rightarrow \text{every term} \approx \log 2 \Rightarrow \bar{L} \approx (${K}+1)\log 2 = ${n4((K+1)*Math.LN2)}`)+
+    callouts([`This number is one point on the loss chart below.`,`Unlike chapter 01 the loss bounces more from epoch to epoch, because the random words are drawn at random every time.`]);}
   }
 }
 
@@ -1079,9 +1260,9 @@ function takeaways(){
   const gl=Object.values(grp).filter(a=>a.length>1);
   const shareTxt=isFileCorpus(RUN.cfg)?'which is why cats, dogs and rabbits still end up together':gl.length?`which is why ${gl.map(a=>a.join(' and ')).join(', ')} end up close together`:'so they end up close together';
   $('takeaways').innerHTML=`
-  <div class="panel"><h2>Why the loss starts near ${base.toFixed(2)}</h2><p>With tiny random weights every score is close to 0, and σ(0) = 0.5, so every yes/no question costs ln 2 = 0.693. Each real pair asks ${K+1} questions (1 real + ${K} wrong), so the starting loss is about ${K+1} × 0.693 = <span class="mono">${base.toFixed(4)}</span>. Epoch 1 averaged <span class="mono">${L[0].toFixed(4)}</span>.</p></div>
-  <div class="panel"><h2>It reached ${last.toFixed(3)} after ${EPOCHS} epoch${EPOCHS>1?'s':''}</h2><p>The loss can't reach 0: a word like <i>furry</i> has several real neighbours, and a randomly drawn "wrong" word is sometimes a real neighbour too. Each pair costs ${K+1} small dot products instead of ${NV}, which is the whole point: the cost doesn't grow with the vocabulary.</p></div>
-  <div class="panel"><h2>What each update does</h2><p>The real context word's row of <code>W</code> and the center word's row of <code>E</code> are pulled toward each other; ${K} randomly drawn rows of <code>W</code> are pushed away from it. Words that share neighbours get pulled toward the same rows, ${shareTxt}.</p></div>`;
+  <div class="panel"><h2>Why the loss starts near ${base.toFixed(2)}</h2><p>At the start every number in E and W is tiny, so every score is close to 0. A score of 0 means a 50% chance, and a 50% answer costs −log 0.5 = 0.693. Each pair asks ${K+1} questions (1 real neighbour + ${K} random words), so the starting cost is about ${K+1} × 0.693 = <span class="mono">${base.toFixed(4)}</span> per pair. Epoch 1 averaged <span class="mono">${L[0].toFixed(4)}</span>.</p></div>
+  <div class="panel"><h2>It reached ${last.toFixed(3)} after ${EPOCHS} epoch${EPOCHS>1?'s':''}</h2><p>The objective balances data and noise labels; when a pair receives both, no single score can satisfy both perfectly. Shared ${D}-dimensional vectors also constrain which scores can be represented. Lower loss means a better fit to this task, not a perfect definition of similarity. Each real pair scores ${K+1} candidates instead of ${NV}; sampling has separate overhead, so this is a scoring-and-update saving, not a constant-runtime guarantee.</p></div>
+  <div class="panel"><h2>What each update does</h2><p>For the real pair, the center word's row of <code>E</code> and the neighbour's row of <code>W</code> move toward each other. For each of the ${K} random words, they move apart. Words that have the same neighbours keep getting pulled toward the same rows of <code>W</code>, ${shareTxt}.</p></div>`;
 }
 // ---------- wiring ----------
 function readCfg(){
@@ -1108,7 +1289,7 @@ function setRun(cfg){
   $('dVocab').textContent=NV;
   $('corpusInfo').className='cinfo';$('corpusInfo').textContent=`${SENTS.length} sentence${SENTS.length>1?'s':''} · ${NV} different words · ${NP} (center, context) pairs per epoch`;
   $('tCorpus').classList.toggle('changed',!isFileCorpus(cfg));
-  drawPresets();
+  drawPresets();buildNeighbours();
   AXES=pcaAxes(RUN.finalE);
   PSCALE=1.2*Math.max(0.05,...project(RUN.finalE).flat().map(Math.abs));
   $('dPairs').textContent=NP;$('dUpd').textContent=NP*EPOCHS;
@@ -1132,10 +1313,10 @@ function render(){
   document.querySelectorAll('.ln').forEach(el=>{const ph=el.dataset.ph;el.classList.toggle('on',!!ph&&lineOn(ph))});
   const list=phasesFor(S.k), ci=list.indexOf(S.ph);
   $('phases').innerHTML=list.map((p,i)=>`<button class="ph ${i<ci?'done':''} ${p===S.ph?'on':''}" data-p="${p}">${phLabel(p)}</button>`).join('');
-  $('stage').innerHTML=stageHTML();
+  $('stage').innerHTML=purposeHTML(true)+stageHTML();
   scrollCode();
   $('selEpoch').value=S.ep; $('rngStep').value=S.k; $('posTxt').textContent=`${S.k+1} / ${NP}`;
-  $('worked').innerHTML=workedHTML(); typesetMath(['worked']);
+  $('worked').innerHTML=purposeHTML()+derivationGraphs()+workedHTML(); typesetMath(['worked']);
   $('lossViz').innerHTML=lossChart(); $('pcaViz').innerHTML=pcaChart(); $('predViz').innerHTML=predTable();
   savePos();
 }
@@ -1227,7 +1408,7 @@ let timer=null;
 function stop(){if(timer){clearInterval(timer);timer=null;$('bPlay').textContent='Play'}}
 $('bPlay').onclick=()=>{if(timer){stop();return}
   $('bPlay').textContent='Pause';timer=setInterval(()=>{if(!move(1))stop()},900)};
-document.addEventListener('keydown',e=>{if(e.target.matches('input,select,textarea'))return;
+document.addEventListener('keydown',e=>{if(e.target.matches('input,select,textarea')||e.target.closest('.graph-plot')||e.target.id==='bTheme')return;
   if(e.key==='ArrowRight'){e.preventDefault();e.shiftKey?$('bPair').click():move(1)}
   else if(e.key==='ArrowLeft'){e.preventDefault();move(-1)}
   else if(e.key===' '){e.preventDefault();$('bPlay').click()}});
@@ -1235,13 +1416,6 @@ document.addEventListener('keydown',e=>{if(e.target.matches('input,select,textar
 new ResizeObserver(()=>{document.querySelector('.code').style.setProperty('--bench-h',document.querySelector('.bench').offsetHeight+'px');scrollCode()}).observe(document.querySelector('.bench'));
 setRun(loadCfg());loadPos();BOOT=false;savePos();pending();
 $('bRestart').onclick=()=>{stop();S={ep:0,k:0,ph:"shuffle"};render()};
-// light/dark switch; with no saved choice the page follows the system setting
-const isDark=()=>{const t=document.documentElement.dataset.theme;return t?t==='dark':matchMedia('(prefers-color-scheme: dark)').matches};
-const themeLabel=()=>{$('bTheme').textContent=isDark()?'Light':'Dark'};
-try{const t=localStorage.getItem('w2vtheme');if(t)document.documentElement.dataset.theme=t}catch(e){}
-themeLabel();
-$('bTheme').onclick=()=>{const t=isDark()?'light':'dark';document.documentElement.dataset.theme=t;try{localStorage.setItem('w2vtheme',t)}catch(e){}themeLabel()};
-matchMedia('(prefers-color-scheme: dark)').addEventListener('change',themeLabel);
 </script>
 
 </body>

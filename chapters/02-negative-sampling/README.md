@@ -1,199 +1,295 @@
 # 02 · Negative sampling
 
-**Interactive walkthrough:** [https://pratikktiwari.github.io/text-nn-from-scratch/02-negative-sampling/](https://pratikktiwari.github.io/text-nn-from-scratch/02-negative-sampling/) (source: [docs/02-negative-sampling](../../docs/02-negative-sampling/index.html)) replays the real training run pair by pair, including every random "wrong" word, with every number worked out.
+**The idea:** instead of scoring every word for every training pair, score the observed neighbour and a few randomly sampled words.
+
+Read [chapter 01](../01-word2vec-skipgram/README.md) first. You should know what a `(center, context)` pair is, why we have two weight tables, and how subtracting a gradient updates them. This chapter explains the new loss and sampling rule.
+
+**Use this chapter in order:** compare the two training tasks, follow one yes/no update, then read how the script repeats it. The longer calculus derivation is optional.
+
+- [Code](skipgram-negative-sampling.py)
+- [Negative sampling intuition: data, noise, and learning](https://pratikktiwari.github.io/text-nn-from-scratch/02-negative-sampling/intuition.html) ([page source](../../docs/02-negative-sampling/intuition.html))
+- [Interactive walkthrough](https://pratikktiwari.github.io/text-nn-from-scratch/02-negative-sampling/) ([page source](../../docs/02-negative-sampling/index.html))
+- [Previous chapter: full-softmax skip-gram](../01-word2vec-skipgram/README.md)
 
 ## What we build
 
-The same skip-gram model as [chapter 01](../01-word2vec-skipgram/README.md), on the same sentences, with the same starting numbers. Only the question the model answers changes.
+We learn word embeddings from the same 27 sentences, 21 words, and 108 training pairs as chapter 01. This version is **skip-gram with negative sampling**, or **SGNS**.
 
-In chapter 01, for every (center, context) pair the model scored **all** V words, turned the scores into chances with a softmax, and nudged every word's output weights. Here, it answers a few yes/no questions instead:
+The important change is the training question:
 
-- "Is *furry* a real neighbour of *cats*?" The answer should be **yes**.
-- "Is *bananas* a real neighbour of *cats*?" "Is *trucks*?" "Is *sweet*?" These are K words picked at random, and the answer should be **no**.
-
-Each question touches only one word's output weights. So one training step costs the same whether the vocabulary has 21 words or 50,000. This is **skip-gram with negative sampling** (SGNS), the version of Word2Vec people actually train.
-
-## Why chapter 01 is too slow
-
-For one pair, the full softmax does work proportional to V twice: once to compute V scores (and the sum below the softmax), and once to update all V columns of `W`.
-
-| | full softmax (ch01) | negative sampling (ch02) |
+| | Chapter 01: full softmax | Chapter 02: negative sampling |
 |---|---|---|
-| words scored per pair | V | 1 + K |
-| output weights changed per pair | V | 1 + K |
-| V = 21, K = 3 | 21 | 4 |
-| V = 50,000, K = 5 | 50,000 | 6 |
+| Question | Which vocabulary word is the context? | Does this pair come from the observed data rather than the noise samples? |
+| Scores per real pair | All `V` words | One positive and `K` negatives |
+| Output | Probabilities across words that sum to 1 | A separate sigmoid output for each scored pair |
+| Training target | The real context's word ID | 1 for the positive pair, 0 for each negative |
 
-With a real vocabulary, the softmax is about ten thousand times more work per pair, and almost all of it is spent pushing down words that were never going to be picked anyway.
+**This is a different objective, not a cheaper way to compute the same softmax.** Its sigmoid outputs do not form a probability distribution over the vocabulary.
+
+The reason for learning embeddings is unchanged: word IDs only identify words, while learned coordinates can capture shared usage and become inputs to later models. The observed-pair-versus-noise task supplies feedback without requiring a human to write down a "correct" vector.
 
 ## Intuition
 
-The goal of chapter 01 was never really to predict neighbours. Predicting was just the excuse that forced words with the same neighbours to get similar numbers. Any task with that effect works.
+### 1. Keep the real pair; add some noise
 
-Negative sampling keeps the effect with a much cheaper task:
+Take the real training pair `(cats, furry)`. For illustration, suppose the sampler draws `bananas`, `trucks`, and `sweet`:
 
-- **Pull together** the center word and the word really next to it.
-- **Push apart** the center word and a few random words.
+| Center | Candidate context | Label | Why |
+|---|---|---|---|
+| cats | furry | 1 (positive) | Observed together in a training pair |
+| cats | bananas | 0 (negative) | Drawn from the noise distribution |
+| cats | trucks | 0 (negative) | Drawn from the noise distribution |
+| cats | sweet | 0 (negative) | Drawn from the noise distribution |
 
-After many pairs, *cats*, *dogs* and *rabbits* have all been pulled toward the same words (*furry*, *playful*, *gentle*) and pushed away from random ones. So they end up close together, just like in chapter 01.
+We want a high score for the first pair and low scores for the other three. We do not score the rest of the vocabulary for this example.
 
-The random words are called **negatives** (the real neighbour is the **positive**). They aren't checked against the sentence. Sometimes a "wrong" word is really a neighbour somewhere else (for *cats*, a sampled *playful* is a real neighbour too). With many random draws, this noise averages out.
+**Negative does not mean "known never to be a neighbour".** It means "sampled as noise for this update". For `cats`, a sampled `playful` is also a real neighbour elsewhere in the corpus. The task learns a statistical distinction across many examples, not a perfect yes/no dictionary of neighbours.
 
-## The pieces
+### 2. Why can the embeddings still become useful?
 
-| Name | Shape | Meaning |
+`cats`, `dogs`, and `rabbits` all occur with `furry`, `playful`, and `gentle`. Training encourages their input embeddings to give high dot products with those shared output vectors.
+
+The negatives discourage giving high scores to everything. Together, these signals can give words with shared contexts similar embeddings.
+
+"Pull together" and "push apart" are useful shorthand for raising and lowering **dot products between input and output vectors**. They do not mean we directly move `E[cats]` toward `E[furry]`, or that we minimize Euclidean distance.
+
+### 3. What work does this save?
+
+| Vocabulary and sample size | Full-softmax scores per real pair | Negative-sampling scores per real pair |
 |---|---|---|
-| `V` | number | vocabulary size; 21 for the toy sentences |
-| `D` | number | how many numbers describe each word; 3 here |
-| `K` | number | how many negatives we draw for every real pair; 3 here |
-| `E` | V × D | the **embeddings**, one row per word. This is what we keep at the end. |
-| `W` | V × D | the **output weights**, one **row** per word. Same numbers as chapter 01's `W`, laid out the other way so `W[word]` is a single row. |
-| `h` | D | the center word's row of `E` |
-| `u` | D | the positive (context) word's row of `W` |
-| `u_neg` | D | one negative word's row of `W` |
-| `counts` | V | how many times each word appears in the sentences |
-| `negative_probabilities` | V | the chance of each word being drawn as a negative |
+| `V = 21`, `K = 3` | 21 | 4 |
+| `V = 50,000`, `K = 5` | 50,000 | 6 |
+
+The dot products and weight updates cost roughly `O(V * D)` for full softmax versus `O((K + 1) * D)` for negative sampling, where `D` is embedding size.
+
+This compares **scoring and updating**, not measured runtime. The teaching script uses `np.random.choice` with a vocabulary-sized probability array and rejection sampling. Sampling has its own cost; the whole script is not guaranteed to take constant time as `V` grows.
 
 ## Math
 
-### 1. How negatives are drawn
+**Notation:** `log` means the natural logarithm, $\log_e$, with base $e \approx 2.718$, matching `np.log`. The interactive walkthrough plots the sigmoid's slope and compares positive and negative losses at the selected pair's score, so the signs of their errors are visible before the derivation.
 
-Each word's chance of being drawn is its count raised to the power 0.75, divided by the total:
+### The tables and settings
 
-$$P(w) = \frac{\text{count}(w)^{0.75}}{\sum_{v} \text{count}(v)^{0.75}}$$
+| Name in code | Shape or default | Meaning |
+|---|---|---|
+| `vocab_length` (`V` below) | 21 | Number of distinct words |
+| `D` | 3 | Coordinates per vector |
+| `K` | 3 | Negative draws per real pair |
+| `E` | `V x D` | Input embeddings; one row per center word |
+| `W` | `V x D` | Output vectors; one row per candidate context word |
+| `h` | `D` | Copy of the current center's row from `E` |
+| `u` or `u_neg` | `D` | Copy of the candidate's row from `W` |
 
-In our sentences, *pets*, *fruit* and *vehicles* appear 9 times each and every other word appears 3 times:
+**Layout change:** chapter 01 stored each output vector as a column of `W`. Here it is a row, so we can use `W[word]` directly. With the same seed and initialization order, the starting word vectors are the same, just transposed in storage.
 
-$$3^{0.75} = 2.2795 \qquad 9^{0.75} = 5.1962$$
+### 1. Draw the negative words
 
-$$\text{total} = 18 \times 2.2795 + 3 \times 5.1962 = 41.031 + 15.589 = 56.620$$
+Count how often each word appears, raise each count to `0.75`, and normalize:
 
-$$P(\text{cats}) = \frac{2.2795}{56.620} = 0.0403 \qquad P(\text{pets}) = \frac{5.1962}{56.620} = 0.0918$$
+$$q(w) = \frac{\operatorname{count}(w)^{0.75}}
+{\sum_v \operatorname{count}(v)^{0.75}}$$
 
-Without the power, *pets* would be drawn 3 times as often as *cats* (9 vs 3). With it, *pets* is drawn about 2.3 times as often. Common words are still drawn more, but rare words get a fairer share. The 0.75 is the value the Word2Vec authors found worked best.
+This is `negative_probabilities` in the code. It is a **sampling distribution**, not a model prediction.
 
-If the drawn word is the real context word, we throw it away and draw again (`sample_negatives`). The same negative can be drawn twice.
+In this corpus, `pets`, `fruit`, and `vehicles` occur 9 times each; the other 18 words occur 3 times each.
 
-### 2. The sigmoid
+| Word type | Raw count | Weight `count ** 0.75` | Base sampling probability |
+|---|---|---|---|
+| `cats` (or any count-3 word) | 3 | about 2.2795 | about 0.0403 |
+| `pets` (or any count-9 word) | 9 | about 5.1962 | about 0.0918 |
 
-Each yes/no question needs a chance between 0 and 1 from a single score. The sigmoid gives that:
+The power flattens the frequencies: a count-9 word is about 2.28 times as likely as a count-3 word, rather than 3 times as likely.
 
-$$\sigma(x) = \frac{1}{1 + e^{-x}}$$
+Why not just use the raw counts? That would concentrate more noise examples on the most common words. Uniform sampling would remove frequency information entirely. The `0.75` power is a design choice between those extremes, not a probability that a word is a true neighbour.
 
-A large positive score gives a chance near 1 ("yes"), a large negative score gives a chance near 0 ("no"), and a score of 0 gives exactly 0.5. Two facts we use below:
+`sample_negatives(context, K)` then applies these rules:
 
-$$1 - \sigma(x) = \frac{e^{-x}}{1 + e^{-x}} = \frac{1}{e^{x} + 1} = \sigma(-x)$$
+- Reject the current true context and draw again. Accepted draws therefore follow `q` conditioned on not being that context.
+- Do not exclude other real neighbours or the center word.
+- Allow repeats. Three draws do not necessarily mean three distinct words.
 
-and, by the chain rule on $(1 + e^{-x})^{-1}$,
+### 2. Score one pair and turn the score into a yes/no output
 
-$$\sigma'(x) = \frac{e^{-x}}{(1 + e^{-x})^2} = \frac{1}{1 + e^{-x}} \cdot \frac{e^{-x}}{1 + e^{-x}} = \sigma(x)\,\big(1 - \sigma(x)\big)$$
+The vector lookup alone cannot answer the training question. The dot product combines the center and candidate coordinates into one adjustable compatibility score. Because that score is unbounded, we use sigmoid to put the prediction on a binary probability scale before comparing it with a label.
 
-### 3. The positive pair
+For a center embedding `h` and candidate output vector `u`:
 
-For center word $c$ and real neighbour $x$:
+$$s = h \cdot u
+\qquad
+p = \sigma(s) = \frac{1}{1+e^{-s}}$$
 
-$$h = E_c \qquad u = W_x \qquad s = h \cdot u = \sum_{i=0}^{D-1} h_i\,u_i$$
+The **sigmoid** maps one score to a number between 0 and 1:
 
-The chance the model gives to "yes, $x$ is a neighbour" is $\sigma(s)$. The loss is the cross-entropy for that answer:
+| Score `s` | Sigmoid output `p` |
+|---|---|
+| `-2` | about `0.119` |
+| `0` | `0.5` |
+| `2` | about `0.881` |
 
-$$L_+ = -\ln \sigma(s) = -\ln \frac{1}{1 + e^{-s}} = \ln(1 + e^{-s})$$
+Unlike softmax, this does not use any other word's score. Think of `p` as the model's positive-label probability for this training task, **not** the probability that this word is the next word or a neighbour in general.
 
-The code computes $\ln(1 + e^{-s})$ as `np.logaddexp(0.0, -score)`, which gives the same value without overflowing for large $|s|$.
+### 3. Measure the error
 
-**Error at the score.** With $\frac{d}{du}(-\ln u) = -\frac{1}{u}$ and the sigmoid derivative from step 2:
+The sigmoid says what the model predicts, not how costly a mistake is. A loss supplies a differentiable objective: it must reward a high positive-label probability for the data example and a low one for noise. Without the negative terms, the task would not penalize indiscriminately high scores.
 
-$$\frac{dL_+}{ds} = -\frac{1}{\sigma(s)} \cdot \sigma(s)\,\big(1 - \sigma(s)\big) = -\big(1 - \sigma(s)\big) = \sigma(s) - 1$$
+Let the label be `y`: 1 for the observed pair, 0 for a noise pair. Binary cross-entropy penalizes the wrong answer:
 
-This is `error = sigmoid(score) - 1.0`. It is always negative: the chance we gave minus the chance we wanted (1). Compare chapter 01's $p_j - y_j$: it is the same "got minus wanted" rule.
+$$L = -y\log p - (1-y)\log(1-p)$$
 
-**Gradients.** Since $s = \sum_i h_i u_i$, we have $\partial s / \partial h_i = u_i$ and $\partial s / \partial u_i = h_i$. So
+The two cases are:
 
-$$\nabla_h L_+ = \big(\sigma(s) - 1\big)\,u \qquad \nabla_u L_+ = \big(\sigma(s) - 1\big)\,h$$
+| Pair type | Label | Loss | Gradient at the score, `p - y` |
+|---|---|---|---|
+| Positive | 1 | $-\log\sigma(s)$ | $\sigma(s)-1$ |
+| Negative | 0 | $-\log(1-\sigma(s))$ | $\sigma(s)$ |
 
-These are `gradient_h = error * u` and `gradient_u = error * h`. Both use $h$ and $u$ from before either one is updated.
+A positive wants a larger score; a negative wants a smaller score. The same "prediction minus target" rule appears in chapter 01, but here it applies to one binary decision.
 
-**Update.**
+For numerical stability, the code calculates the positive loss as `np.logaddexp(0.0, -score)` and the negative loss as `np.logaddexp(0.0, score_neg)`. These equal `log(1 + exp(-s))` and `log(1 + exp(s))` without directly forming a potentially overflowing exponential.
 
-$$E_c \leftarrow E_c - \eta\,\nabla_h L_+ \qquad W_x \leftarrow W_x - \eta\,\nabla_u L_+$$
+### 4. Update the two vectors
 
-Since the error is negative, subtracting it moves $E_c$ toward $u$ and $W_x$ toward $h$. The two vectors line up more, so next time their score is higher.
+With `error = p - y` and learning rate $\eta$:
 
-### 4. Each negative
+$$\nabla_h L = \text{error}\,u
+\qquad
+\nabla_u L = \text{error}\,h$$
 
-For a drawn word $n$, we re-read $h$ (the positive update already moved $E_c$):
+$$E_c \leftarrow E_c - \eta\,\nabla_h L
+\qquad
+W_{\text{candidate}} \leftarrow W_{\text{candidate}} - \eta\,\nabla_u L$$
 
-$$h = E_c \qquad u_n = W_n \qquad s_n = h \cdot u_n$$
+Both gradients use copies of the vectors from **before** that binary update. Only the current center row of `E` and the candidate row of `W` change.
 
-Now the right answer is "no", whose chance is $1 - \sigma(s_n) = \sigma(-s_n)$:
+**Small worked example.** Use illustrative two-coordinate vectors, not the script's initialized values:
 
-$$L_n = -\ln \sigma(-s_n) = \ln(1 + e^{s_n})$$
+```text
+h = [0.2, -0.1]
+u = [0.4,  0.2]
+label = 1
+learning rate = 0.05
+```
 
-In code: `np.logaddexp(0.0, score_neg)`.
+1. Score: `0.2 * 0.4 + (-0.1) * 0.2 = 0.06`.
+2. Sigmoid output: about `0.5150`.
+3. Positive loss: `-log(0.5150)`, about `0.6636`.
+4. Error: `0.5150 - 1 = -0.4850`.
+5. Gradients: `gradient_h = [-0.1940, -0.0970]` and `gradient_u = [-0.0970, 0.0485]`.
+6. Updated vectors: `h = [0.2097, -0.09515]` and `u = [0.40485, 0.197575]`, approximately.
 
-**Error at the score.** Write $L_n = -\ln\big(1 - \sigma(s_n)\big)$. The derivative of $1 - \sigma(s_n)$ is $-\sigma(s_n)\big(1 - \sigma(s_n)\big)$, so
+Their dot product has increased to about `0.0661`. The positive pair now gets a higher score.
 
-$$\frac{dL_n}{ds_n} = -\frac{1}{1 - \sigma(s_n)} \cdot \Big(-\sigma(s_n)\,\big(1 - \sigma(s_n)\big)\Big) = \sigma(s_n)$$
+For a negative pair, the error would instead be `+0.5150` at the original score. Subtracting that gradient takes the update in the opposite direction.
 
-This is `error_neg = sigmoid(score_neg)`. Again "got minus wanted": the chance of "yes" we gave, minus the 0 we wanted. It is always positive.
+### 5. Repeat for the whole training pair
 
-**Gradients and update.**
+The script does **one positive update, followed by `K` negative updates**. It re-reads the center embedding before each negative because the previous update already changed it. A repeated negative is updated again using its latest vector.
 
-$$\nabla_h L_n = \sigma(s_n)\,u_n \qquad \nabla_{u_n} L_n = \sigma(s_n)\,h$$
+At a fixed set of weights, the usual combined SGNS loss is:
 
-$$E_c \leftarrow E_c - \eta\,\sigma(s_n)\,u_n \qquad W_n \leftarrow W_n - \eta\,\sigma(s_n)\,h$$
+$$L_{\text{pair}} =
+-\log\sigma(h\cdot u_x)
+-\sum_{k=1}^{K}\log\sigma(-h\cdot u_{n_k})$$
 
-Since the error is positive, $E_c$ moves away from $u_n$ and $W_n$ moves away from $h$. Their score goes down.
+Here `x` is the true context and `n_k` is the kth sampled negative.
 
-### 5. The whole loss for one pair
+**Implementation detail:** this script updates immediately after each term rather than accumulating all gradients at one fixed `h`. Its logged loss sums terms evaluated just before their individual updates. Do not expect an implementation with one combined update to produce identical numbers.
 
-Adding the positive and the K negatives $n_1, \dots, n_K$:
+Near initialization, all scores are close to 0, so each binary loss is about `log(2)`. With `K = 3`, the loss per real pair starts near `4 * log(2)`, about `2.77`.
 
-$$L = -\ln \sigma(h \cdot u_x) \;-\; \sum_{k=1}^{K} \ln \sigma(-h \cdot u_{n_k})$$
+<details>
+<summary>Optional: where do the gradients come from?</summary>
 
-At the start every score is close to 0, so every term is close to $\ln 2 = 0.6931$. With K = 3 that makes about $4 \ln 2 = 2.77$ per pair, which is exactly the first epoch's average loss (2.7682).
+The sigmoid derivative is:
 
-This is not the same number as chapter 01's loss ($\ln 21 \approx 3.04$ at the start), so the two curves can't be compared directly. Only the shape of each curve, and the embeddings they produce, can.
+$$\sigma'(s)=\sigma(s)(1-\sigma(s))$$
+
+For a positive pair:
+
+$$\frac{d[-\log\sigma(s)]}{ds}
+=-\frac{\sigma(s)(1-\sigma(s))}{\sigma(s)}
+=\sigma(s)-1$$
+
+For a negative pair:
+
+$$\frac{d[-\log(1-\sigma(s))]}{ds}
+=\frac{\sigma(s)(1-\sigma(s))}{1-\sigma(s)}
+=\sigma(s)$$
+
+Both are `p - y`. Since $s=\sum_i h_i u_i$, its derivatives with respect to `h` and `u` are `u` and `h`. The chain rule gives the two vector gradients above.
+
+The script clips sigmoid inputs to `[-15, 15]` to avoid overflow. The derivation describes the mathematical sigmoid; clipping approximates its extreme values in the implementation.
+
+</details>
 
 ## Code walkthrough
 
-The code is in [`skipgram-negative-sampling.py`](skipgram-negative-sampling.py). Everything up to the pairs is the same as chapter 01. The changes:
+Read [`skipgram-negative-sampling.py`](skipgram-negative-sampling.py) in these blocks:
 
-1. **Hyperparameters.** `EPOCHS = 50` (5 is too few for this task) and the new `K = 3`.
-2. **`W` layout.** `W` stays V × D (not transposed), so `W[word]` is that word's row. The starting numbers are the same as chapter 01's, since `np.random.seed(42)` draws `E` and then `W` in the same order.
-3. **Negative-sampling table.** `counts`, then `counts ** 0.75` normalised into `negative_probabilities` (math step 1).
-4. **`sample_negatives(context, K)`.** Draws with `np.random.choice(vocab_length, p=negative_probabilities)` until it has K words that aren't the context word.
-5. **`sigmoid(x)`.** Clips `x` to [−15, 15] before `np.exp`, so it never overflows.
-6. **Training loop.** For each epoch it shuffles the pairs. Then for each pair it does the positive update (math step 3), draws K negatives, and does one update per negative (math step 4), re-reading `h` each time.
-7. **Results.** The average loss per real pair goes into `losses`. Then, as in chapter 01, it prints the embeddings, plots the loss and the 2-D PCA view, and lists the most similar words.
+| Block | What to look for |
+|---|---|
+| Prepare text and pairs | Same corpus, vocabulary, and window rule as chapter 01 |
+| Initialize weights | Seed 42; `E` and `W` both have one row per word |
+| Prepare sampling | `counts`, `negative_probabilities`, and `sample_negatives` |
+| Positive update | Target 1; `error = sigmoid(score) - 1.0` |
+| Negative updates | Draw `K` negatives; target 0; `error_neg = sigmoid(score_neg)` |
+| Inspect results | Average loss per real pair, learned vectors, plots, and cosine rankings |
+
+Defaults: `WINDOW = 1`, `D = 3`, `K = 3`, `LEARNING_RATE = 0.05`, `EPOCHS = 50`.
+
+Small random starting vectors let both tables receive nonzero learning signals. Initializing both tables to zero would give a zero dot-product gradient with respect to either vector. Seed 42 makes the nonzero start repeatable; it does not remove the need to learn.
+
+One epoch visits all 108 real pairs. Each real pair triggers four binary updates at the default `K`, giving 432 binary updates per epoch. Chapter 01 defaults to only 5 epochs, so the default runs are not a controlled comparison of convergence speed.
 
 ## Run it
 
-From the repository root:
+If chapter 01's environment is already installed, run these commands from the repository root:
 
 ```bash
 source .venv/bin/activate
-cd chapters/02-negative-sampling
-python skipgram-negative-sampling.py
+python chapters/02-negative-sampling/skipgram-negative-sampling.py
 ```
 
-Each run writes a log to a new `skipgram-negative-sampling.output_N.txt` next to the script. These logs are gitignored.
+For a first run, create the environment and install dependencies first:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+python chapters/02-negative-sampling/skipgram-negative-sampling.py
+```
+
+The activation command above is for macOS/Linux; Windows PowerShell uses `.\.venv\Scripts\Activate.ps1`.
+
+The script prints the data, initial weights, sampling probabilities, epoch losses, and learned embeddings. It opens loss and embedding plots. **Close the plot windows to let it continue to the similar-word output.**
+
+Each run also writes a new `skipgram-negative-sampling.output_N.txt` beside the script. These logs are gitignored; no existing log is overwritten.
 
 ## What to notice
 
-- **The loss.** It starts at 2.77 ($4 \ln 2$) and barely moves for the first 5 epochs (2.7476 at epoch 5). Then it falls: 2.47 at epoch 10, 1.91 at 20, 1.49 at 30 and 1.21 at 50. In the early epochs every vector is tiny, so every score is close to 0 and the pushes and pulls nearly cancel. Once the vectors grow, the groups separate quickly.
-- **The groups.** After 50 epochs, the three groups have clearly separated. The words most similar to *cats* are *pets* (0.998), *dogs* (0.997) and *rabbits* (0.997). For *dogs* they are *rabbits* (0.99999), *pets* and *cats*.
-- **Why *pets* sits next to *cats*.** They share exactly the same neighbours: *furry*, *playful* and *gentle*. The model can't tell them apart, so they get the same embedding. *fruit* and *vehicles* behave the same way with their groups.
-- **The describing words form their own groups.** *furry*, *playful* and *gentle* end up together, as do *sweet*, *juicy* and *fresh*, and *fast*, *motorized* and *wheeled*. Each set shares neighbours too.
-- **Randomness.** Every negative is a random draw, so this run's numbers depend on the seed and on the exact order of draws. The walkthrough page replays NumPy's random generator exactly, so its numbers match the log line for line.
+- **Loss can move slowly at first.** Small initial vectors give scores near zero. Use the 50-epoch run to examine the learned structure rather than judging it after five epochs.
+- **Do not compare raw loss with chapter 01.** Chapter 01 measures a vocabulary-wide classification loss; this chapter sums `K + 1` binary losses per real pair.
+- **Changing `K` changes the loss scale.** More negatives add more terms. A larger loss after increasing `K` does not by itself mean worse embeddings.
+- **Similar context, similar vectors:** look for `cats`, `dogs`, and `rabbits` to group together. `pets` can join them because it shares the same immediate neighbours. Similar contexts encourage similarity; they do not guarantee identical vectors.
+- **Use rankings as well as the plot.** Cosine similarity compares rows of `E`. The plot normalizes those embeddings and uses PCA to reduce three dimensions to two, which can hide some differences.
+- **Same initialization does not mean the same training path.** Sampling consumes random numbers, and the objectives differ. Changing `K` or sampling rules changes later draws and updates, even with seed 42.
+
+**Why compare embeddings after training?** The input rows have been adjusted to solve many related decisions through shared output vectors. Comparing two rows of `E` by [cosine similarity](../01-word2vec-skipgram/README.md#what-to-notice) asks whether their learned directions are similar, rather than whether one candidate gets a positive label. That makes the representations reusable even though `W` and sigmoid were needed to teach them.
+
+Before moving on, distinguish **prediction** (score and sigmoid), **judgment** (binary loss), **responsibility** (gradients), and **learning** (the immediate parameter update). None of the first three alone changes an embedding.
 
 ## Exercises
 
-1. Set `K = 1`, then `K = 10`. How does the loss curve change, and do the groups still separate after 50 epochs?
-2. Replace `counts ** 0.75` with `counts ** 1.0`, then with `counts ** 0.0` (every word equally likely). Count how often *pets* gets drawn in each case.
-3. Remove the `if word != context` check in `sample_negatives`. What does the model now get told, and does training still work?
-4. Run with `EPOCHS = 5` and look at the words most similar to *dogs*. Why does this task need more epochs than chapter 01?
-5. Compare the final embeddings with chapter 01's (same seed, same starting numbers). Do the same groups form?
+Change one thing at a time:
+
+1. Try `K = 1`, then `K = 10`. Write down the near-initialization loss you expect: `(K + 1) * log(2)`. Compare the final cosine rankings instead of comparing raw losses across these runs.
+2. Replace `counts ** 0.75` with `counts ** 1.0`, then `counts ** 0.0`. How does the printed base sampling probability for `pets` change? With exponent 0, each word should have probability `1/21`.
+3. Find where `sample_negatives` rejects the positive context. If that check were removed, how could the same `(center, context)` pair receive both labels within one training step?
+4. Set `EPOCHS = 5`, then restore 50. Compare the neighbours of `dogs`. What changes that the early loss alone did not reveal?
+5. Run both chapters for 50 epochs with the same `D` and learning rate. Compare word groups and rankings, but not raw loss values or individual coordinates: their objectives and random update sequences differ.
 
 ## What's next
 
-**03 · Bigram language model.** So far, the models only learned *which words appear near each other*. They can't produce text. Chapter 03 builds the simplest model that can: given one word, it predicts the next one, and then we can sample from it to generate sentences. It brings back the softmax from chapter 01, now as the actual goal rather than an excuse.
+So far, we have learned representations by using words on either side of a center word. We have not trained a model specifically to predict the next word.
+
+The planned next chapter is a **bigram language model**: given one word, predict the next one, then sample repeatedly to generate text. That task brings back a vocabulary-wide probability distribution like the softmax in chapter 01.

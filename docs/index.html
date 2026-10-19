@@ -3,25 +3,19 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>From Word2Vec to GPT-2</title>
-<meta name="description" content="Interactive, step-by-step visualizations of text neural networks, from Word2Vec to GPT-2, built from scratch.">
+<title>Text Neural Networks from Scratch</title>
+<meta name="description" content="Explore neural networks for text through small implementations, interactive visualizations, and worked examples.">
+<script src="theme.js"></script>
+<link rel="stylesheet" href="theme.css">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,600&family=Source+Sans+3:wght@400;600&family=JetBrains+Mono:wght@400&display=swap">
 <style>
 :root{
-  --bg:#f6f7f9; --surface:#ffffff; --line:#dde2e9; --fg:#18212e; --muted:#525e70; --faint:#8b94a3;
-  --center:#2357a8; --target:#c0580f;
   --f-display:"Source Serif 4","Iowan Old Style",Georgia,serif;
   --f-body:"Source Sans 3",system-ui,-apple-system,"Segoe UI",sans-serif;
   --f-mono:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;
 }
-@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
-  --bg:#10151c; --surface:#161d27; --line:#2a3443; --fg:#e6ebf1; --muted:#a0abb9; --faint:#6f7b8b;
-  --center:#6aa6f2; --target:#f19a52; color-scheme:dark}}
-:root[data-theme="dark"]{
-  --bg:#10151c; --surface:#161d27; --line:#2a3443; --fg:#e6ebf1; --muted:#a0abb9; --faint:#6f7b8b;
-  --center:#6aa6f2; --target:#f19a52; color-scheme:dark}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:16px;line-height:1.6}
 .wrap{max-width:860px;margin:0 auto;padding-block:48px 72px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:40px}
@@ -33,6 +27,7 @@ a{color:var(--center);text-underline-offset:3px}
 .lede{color:var(--muted);font-size:18px;max-width:62ch}
 header{display:flex;flex-direction:column;gap:16px}
 .kicker{font-size:14px;font-weight:600;color:var(--center)}
+.home-top{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px}
 ol{list-style:none;margin:0;padding:0;border-top:1px solid var(--line)}
 li{display:grid;grid-template-columns:3.2em minmax(0,1fr) auto;gap:4px 16px;align-items:baseline;padding:16px 0;border-bottom:1px solid var(--line)}
 .n{font-family:var(--f-display);font-size:22px;font-weight:600;color:var(--faint);font-variant-numeric:lining-nums}
@@ -50,14 +45,15 @@ footer{color:var(--muted);font-size:14px;border-top:1px solid var(--line);paddin
 <body>
 <div class="wrap">
   <header>
-    <span class="kicker">Text neural networks, built from scratch</span>
-    <h1>From Word2Vec to GPT-2</h1>
-    <p class="lede">We start with the simplest way to learn word meanings and add one idea per chapter until we reach a GPT-2 style model. Each chapter has an interactive page that replays a real training run line by line, with every number worked out.</p>
+    <div class="home-top"><span class="kicker">text-nn-from-scratch</span><button class="theme-btn" id="bTheme" type="button" aria-label="Switch to dark theme">Dark mode</button></div>
+    <h1>Text Neural Networks from Scratch</h1>
+    <p class="lede">Explore how neural networks learn from text through small implementations, interactive visualizations, and worked examples.</p>
+    <p>Start with a chapter's intuition page to see why it learns, then explore the math and code.</p>
   </header>
 
   <ol>
-    <li class="ready"><span class="n">01</span><div class="t"><b>Word2Vec: skip-gram</b><span>Embeddings, softmax, cross-entropy and backprop, all by hand.</span></div><span class="st"><a href="01-word2vec-skipgram/">Open →</a></span></li>
-    <li class="ready"><span class="n">02</span><div class="t"><b>Negative sampling</b><span>Why full softmax is slow, and the trick that replaces it.</span></div><span class="st"><a href="02-negative-sampling/">Open →</a></span></li>
+    <li class="ready"><span class="n">01</span><div class="t"><b>Word2Vec: skip-gram</b><span>Word embeddings, softmax, cross-entropy, and gradients.</span></div><span class="st"><a href="01-word2vec-skipgram/intuition.html">Intuition</a> · <a href="01-word2vec-skipgram/">Math &amp; code →</a></span></li>
+    <li class="ready"><span class="n">02</span><div class="t"><b>Negative sampling</b><span>Learning embeddings without scoring every word.</span></div><span class="st"><a href="02-negative-sampling/intuition.html">Intuition</a> · <a href="02-negative-sampling/">Math &amp; code →</a></span></li>
     <!-- <li><span class="n">03</span><div class="t"><b>Bigram language model</b><span>The first model that predicts the next word.</span></div><span class="st">planned</span></li>
     <li><span class="n">04</span><div class="t"><b>MLP language model</b><span>Looking at several previous words at once.</span></div><span class="st">planned</span></li>
     <li><span class="n">05</span><div class="t"><b>RNN language model</b><span>A memory carried from word to word.</span></div><span class="st">planned</span></li>
@@ -70,7 +66,7 @@ footer{color:var(--muted);font-size:14px;border-top:1px solid var(--line);paddin
     <li><span class="n">12</span><div class="t"><b>GPT-2 (124M)</b><span>Reproducing GPT-2 small.</span></div><span class="st">planned</span></li> -->
   </ol>
 
-  <footer><p>Each page runs entirely in the browser. The concepts and the code for every chapter are in the repository's <code>chapters/</code> folder.</p></footer>
+  <footer><p>Code and chapter notes are in the repository's <code>chapters/</code> folder.</p></footer>
 </div>
 </body>
 </html>

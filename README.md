@@ -1,12 +1,25 @@
-# nlp-training
+# text-nn-from-scratch
 
 **Live site:** https://pratikktiwari.github.io/text-nn-from-scratch/
 
-A step-by-step path from word embeddings to GPT-2, built from scratch. Each chapter adds one idea on top of the previous one and comes in three parts:
+Small implementations, explanations, and interactive experiments for learning neural networks for text.
 
+- **Intuition**: a separate page for each chapter explains the training task, predictions, choice of loss, and effect of gradient updates. Play a deterministic training run to see predictions and measured loss change together.
 - **Concepts**: the chapter's `README.md`. It covers the intuition first, then the math with every step derived, then a walk through the code.
-- **Code**: small, runnable scripts. NumPy first so every gradient is written by hand; PyTorch once the math is clear.
+- **Code**: small, runnable NumPy scripts with gradients written by hand.
 - **Visualization**: an interactive page that replays a real training run line by line. All pages are published from [`docs/`](docs/) with GitHub Pages at [https://pratikktiwari.github.io/text-nn-from-scratch/](https://pratikktiwari.github.io/text-nn-from-scratch/).
+
+## How to learn with a chapter
+
+Start with [Word2Vec intuition](docs/01-word2vec-skipgram/intuition.html) or [negative sampling intuition](docs/02-negative-sampling/intuition.html). Each follows one example from embedding lookup through dot products, output transformations, likelihood-based loss, and gradients. Small weight probes show what sensitivity means before introducing an update. These are separate pages, not modes in one sandbox.
+
+The final experiment replays 200 epochs using the chapter corpus, seed, dimensions, window, and sampling rules. The longer run makes loss trends visible; the scripts default to 5 and 50 epochs respectively. Set the learning rate to zero to test what happens without updates. The negative-sampling plot also includes a constant-output baseline that fits only the 1:3 label ratio, to distinguish that shortcut from learning word-dependent behaviour.
+
+Then open the chapter's math-and-code walkthrough, choose an experiment, and follow the highlighted code. Each training step links to a synchronized "Why this step?" explanation before its existing equations, derivation, and numerical tables. The explanations distinguish predictions, loss, gradients, and parameter updates, and use the selected run's values.
+
+Change one setting at a time and predict what it should affect before rerunning. Finish with the chapter's takeaways: lower loss means fitting that chapter's objective better, not necessarily better word similarity. In particular, full-softmax and negative-sampling losses are not directly comparable.
+
+The site defaults to light mode. The theme switch on the homepage and each learning page remembers an explicit choice across navigation and reloads. Mathematical `log` notation means base e, matching NumPy. In the derivations, synchronized curves show the current value and a dashed tangent: its slope explains the sign and size of the error or gradient without changing the training run.
 
 ## Roadmap
 
@@ -30,7 +43,7 @@ A step-by-step path from word embeddings to GPT-2, built from scratch. Each chap
 
 ```
 chapters/NN-name/     README.md (concepts), code, raw/ (pure-Python versions), outputs/ (gitignored)
-docs/NN-name/         index.html, the interactive visualization for that chapter
+docs/NN-name/         intuition.html (why it learns), index.html (math and code)
 docs/index.html       landing page for GitHub Pages
 common/               helpers shared by 3+ chapters (empty until needed)
 archive/              older notebooks, not part of the path

@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Negative Sampling Intuition: From Training Examples to Learned Embeddings</title>
+<meta name="description" content="Understand how Word2Vec's observed pairs and sampled noise become binary predictions, loss, successive gradient updates, and learned representations.">
+<script src="../theme.js"></script>
+<link rel="stylesheet" href="../theme.css">
+<link rel="stylesheet" href="../intuition.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,600&family=Source+Sans+3:wght@400;600&family=JetBrains+Mono:wght@400&display=swap">
+<script src="../word2vec-intuition.js" defer></script>
+</head>
+<body data-objective="negative">
+<main class="wrap">
+  <div class="topbar">
+    <a href="../">All chapters</a>
+    <nav aria-label="Chapter navigation"><a href="./">Negative sampling math &amp; code</a><a href="../01-word2vec-skipgram/intuition.html">Word2Vec intuition</a><button class="theme-btn" id="bTheme" type="button" aria-label="Switch to dark theme">Dark mode</button></nav>
+  </div>
+  <header>
+    <span class="kicker">Chapter 02 / Negative sampling intuition</span>
+    <h1>Learn word representations by distinguishing data from noise</h1>
+    <p class="lede">Build the training task first. Then follow one pair through its score, output, loss, and weight changes before watching the full run.</p>
+    <p>This page explains why the operations exist. The <a href="./">math &amp; code walkthrough</a> expands their calculations. <a href="../01-word2vec-skipgram/intuition.html">Full-softmax Word2Vec</a> uses a different prediction task; negative sampling is not that same probability distribution calculated faster.</p>
+  </header>
+  <p id="error" class="error" role="alert" hidden></p>
+  <noscript><p class="error">Enable JavaScript for the worked values and experiment. The prose remains readable without it.</p></noscript>
+
+  <section aria-labelledby="task-heading">
+    <h2 id="task-heading">1. Build a task that gives word vectors useful feedback</h2>
+    <div class="prose">
+      <p>We want a small list of learned numbers for each word: its <b>embedding</b>. A word ID identifies a word, but numerical distances between arbitrary IDs say nothing about its usage. Adjustable coordinates can reflect usage, provided we give them a task connected to text.</p>
+      <div class="sentences"><span>cats furry pets</span><span>dogs furry pets</span><span>cats playful pets</span></div>
+      <p>With a window of one, the first sentence yields <code>cats / furry</code>, <code>furry / cats</code>, <code>furry / pets</code>, and <code>pets / furry</code>. Each is a center word paired with an observed neighbour. We can use these pairs as training evidence without being told the correct embedding coordinates.</p>
+      <p>Full softmax learns by predicting an observed context among all vocabulary words. Negative sampling changes that job: distinguish an <b>observed pair</b> from a pair constructed using a <b>sampled noise word</b>. Each update needs only a few candidate scores instead of every vocabulary score.</p>
+      <h3>The labels come from how we obtained an example</h3>
+      <p>Give an observed pair such as <code>cats / furry</code> label 1. Draw three words from a sampling distribution and pair each with the same center; give those pairs label 0. If cars is drawn, <code>cats / cars</code> is a label-0 example.</p>
+      <p>Label 0 does not mean “known to be unrelated.” Playful can be sampled as noise even though cats occurs beside playful elsewhere in the text. The current observed context is rejected by the sampler, but other neighbours, the center word itself, and repeated samples are allowed.</p>
+      <p><b>Both kinds of example are necessary for this task.</b> If we trained only on label 1, giving every pair a high score would reduce loss without learning useful distinctions. Noise examples make that shortcut costly. Cats and dogs still receive related feedback because they share observed contexts, but now that signal competes with sampled noise.</p>
+    </div>
+    <details><summary>Sampling rule, actual sentences, and run settings</summary>
+      <p>The sampler assigns weight count^0.75 to each word, then normalizes these weights to probabilities. Frequent words are useful, plausible alternatives, but the exponent reduces their dominance: pets occurs 9 times and cats 3 times, giving weights about 5.196 and 2.280 rather than 9 and 3. Sampling is not a search for words the model has proved wrong.</p>
+      <p class="note">The chapter's 27 sentences, 21 words, 108 directed pairs, window 1, D = 3, K = 3, and NumPy-compatible seed 42. The default learning rate is 0.05. This page extends training to 200 epochs; the script defaults to 50. Controls replay measured checkpoints.</p>
+      <pre id="corpus" class="scroll"></pre>
+    </details>
+  </section>
+
+  <section aria-labelledby="prediction-heading">
+    <h2 id="prediction-heading">2. Turn one pair into a binary prediction</h2>
+    <div class="prose">
+      <p>The model stores two tables of adjustable numbers, or weights. <code>E</code> holds a vector for each word as an input. <code>W</code> holds a vector for each word as a candidate context. Each vector has three coordinates here, initially random.</p>
+      <p>The forward calculation receives the center word and candidate word. It does not receive their label. We use the label only afterward to decide whether its output was helpful.</p>
+      <p>Providing the candidate does not give away the answer in this task: the unknown is whether this pair was observed or sampled. In full softmax, the unknown was which context word occurred. Changing the question changes what information belongs in the input.</p>
+    </div>
+    <div class="controls"><label>Input word <select id="center"></select></label><label>Observed context to inspect <select id="context"></select></label></div>
+    <p class="note">The selected example comes from the observed pairs. Below, we also examine the feedback a noise label would demand. All worked values follow the epoch selected in the training section.</p>
+    <h3>Look up one vector for each role</h3>
+    <p id="vectorLookup" class="prose"></p>
+    <p class="prose">The two tables let a word have different adjustable values for the input and context roles. When furry is a candidate, the calculation uses its vector in <code>W</code>, not <code>E[furry]</code>. This implementation learns compatibility between the roles rather than directly comparing two input embeddings.</p>
+    <h3>Combine the vectors into a score</h3>
+    <p class="prose">We need the output to depend on both participating vectors so feedback can change both. A <b>dot product</b> does that: multiply each input coordinate by the corresponding candidate coordinate and add the products.</p>
+    <div class="scroll" tabindex="0" role="region" aria-label="How the selected pair's score is built">
+      <table><caption>Construct the selected pair's score from the current weights</caption><thead><tr><th scope="col">Coordinate</th><th scope="col">Input value</th><th scope="col">Candidate value</th><th scope="col">Product</th></tr></thead><tbody id="dotRows"></tbody><tfoot><tr><th scope="row" colspan="3">Add the three products: score</th><td class="number" id="currentScore"></td></tr></tfoot></table>
+    </div>
+    <p class="prose">The score is an unrestricted compatibility number. Positive and negative coordinate products can reinforce or cancel. A large score is not itself a probability or a guarantee that the words mean similar things.</p>
+    <h3>Use sigmoid to express the score as a binary output</h3>
+    <p class="prose">The training label has two possible values. We want an output between 0 and 1 that can be compared with those labels. <b>Sigmoid</b> maps the score onto that range smoothly: score 0 maps to 0.5, increasingly positive scores approach 1, and increasingly negative scores approach 0.</p>
+    <p class="formula"><code>q = 1 / (1 + exp(-score))</code></p>
+    <p class="prose">Here <code>exp(s)</code> means e raised to s, with e approximately 2.718. At score 0, exp(0) = 1, so the denominator is 2 and q = 0.5. A positive score makes exp(-score) smaller, reducing the denominator and raising q.</p>
+    <p class="prose">The output q is the model's data-versus-noise prediction for this pair. The remaining 1 - q is assigned to label 0. For example, q = 0.9 assigns 90% to label 1 and 10% to label 0.</p>
+    <p class="prose">Another way to see this choice of mapping is through <b>odds</b>: compare the two assigned probabilities as a ratio. At q = 0.9, the data-to-noise odds are 0.9 / 0.1, or 9 to 1. Sigmoid makes those odds equal exp(score). Score 0 gives odds 1 to 1; raising the score increasingly favours label 1. This is a chosen model of the label probabilities, not a measurement of whether a word is truly related.</p>
+    <p class="prose">A hard yes/no threshold would throw away the distinction between a barely positive score and a strongly positive one. The smooth sigmoid retains that changing preference, so the loss can give feedback even when a small score change would not flip a yes/no decision.</p>
+    <div id="transformExample"></div>
+    <p class="takeaway">We did not use any other word's score to obtain q. Each pair has a separate binary output, so outputs across the vocabulary do not sum to 1. They are not next-word probabilities or a calibrated list of true neighbours.</p>
+  </section>
+
+  <section aria-labelledby="loss-heading">
+    <h2 id="loss-heading">3. Use the label to decide which output is helpful</h2>
+    <div class="prose">
+      <p>Now reveal how the example was obtained. The output always means the same thing: a high q favours the data label. But whether that is helpful depends on the example's actual label.</p>
+      <p>For illustration, suppose the text supplies <code>cats / furry</code> and the sampler chooses cars:</p>
+    </div>
+    <div class="scroll" tabindex="0" role="region" aria-label="How the label determines the desired output">
+      <table><caption>First establish what a better prediction means</caption><thead><tr><th scope="col">Example</th><th scope="col">Source and label</th><th scope="col">Desired output</th><th scope="col">A 90% data output</th></tr></thead><tbody>
+        <tr><td>cats / furry</td><td>Observed: label 1</td><td>High q</td><td>Agrees with the label.</td></tr>
+        <tr><td>cats / cars</td><td>Sampled: label 0</td><td>Low q</td><td>Confidently favours the wrong label.</td></tr>
+      </tbody></table>
+    </div>
+    <div class="prose">
+      <p>These examples need feedback in opposite directions. A low output is a mistake for an observed example; a high output is a mistake for a noise example. We call the numerical cost of a prediction its <b>loss</b>. A costly prediction should become cheaper as it agrees more with the label.</p>
+      <h3>Choose the probability assigned to the actual label</h3>
+      <p>The model assigns q to label 1 and 1 - q to label 0. For an observed example, use q. For a noise example, use 1 - q. Binary cross-entropy applies <code>-log</code> to that selected probability: high probability for the actual label gives low cost.</p>
+      <p>Log reverses exponentiation: log(0.5) is about -0.693 because e raised to -0.693 is about 0.5. Probabilities below 1 need negative powers, so the minus sign makes the cost positive. Larger assigned probability gives a smaller cost.</p>
+    </div>
+    <div class="scroll" tabindex="0" role="region" aria-label="Costs of the same output under the two labels">
+      <table><caption>The source label changes which part of the output we judge</caption><thead><tr><th scope="col">Output</th><th scope="col">Observed, label 1</th><th scope="col">Noise, label 0</th></tr></thead><tbody>
+        <tr><td>q = 0.9</td><td>-log(0.9) = 0.105: small cost</td><td>-log(0.1) = 2.303: large cost</td></tr>
+        <tr><td>q = 0.1</td><td>-log(0.1) = 2.303: large cost</td><td>-log(0.9) = 0.105: small cost</td></tr>
+      </tbody></table>
+    </div>
+    <div class="prose">
+      <h3>The logarithm connects individual costs to fitting the labels</h3>
+      <p>Suppose one observed example receives q = 0.8 and one noise example receives q = 0.3. The model assigns their actual labels probabilities 0.8 and 0.7. Under the per-example likelihood model, their combined probability is <code>0.8 × 0.7 = 0.56</code>.</p>
+      <p>Maximizing such products is equivalent to minimizing a sum of negative logarithms. Here <code>-log(0.8) - log(0.7) = -log(0.56)</code>, about 0.580. This gives smooth feedback, avoids long products of tiny numbers, and makes confident mistakes expensive. This is why this probabilistic model uses binary cross-entropy, rather than an arbitrary right/wrong counter. It treats labels as supervised examples, not as independent facts about language.</p>
+      <p>Log means base e throughout. For the mathematical sigmoid, the score-based forms used in the code are:</p>
+      <div class="formula"><p>Label 1: <code>loss = log(1 + exp(-score))</code></p><p>Label 0: <code>loss = log(1 + exp(score))</code></p></div>
+      <p>These express the feedback we established from the examples: raising the score shrinks the first cost and increases the second. They do not introduce another task.</p>
+      <h3>The selected pair, with this checkpoint's output</h3>
+      <p id="lossMeaning"></p>
+      <div class="comparison"><p>If observed (label 1)<strong class="number" id="observedLoss"></strong></p><p>If sampled as noise (label 0)<strong class="number" id="noiseLoss"></strong></p></div>
+      <p id="noiseMeaning" class="note"></p>
+      <h3>A real neighbour need not receive 100%</h3>
+      <p>The same pair can receive label 1 when observed and label 0 when drawn as noise in another example. Imagine a pair appearing four times as data and once as noise. A constant q = 0.8 gives those five labels more likelihood than q = 1, which assigns zero probability to the noise label. This is an illustrative count, not a claim about the selected pair.</p>
+      <p>Repeated conflicting examples therefore favour a statistical compromise. This explains both nonzero loss and why q is not simply the probability that a word is a real neighbour.</p>
+      <details><summary>Numerical safeguards at extreme scores</summary><p class="note">The code evaluates log(1 + exp(value)) stably from the unclipped score. Its sigmoid helper clips scores to [-15, 15]. Displayed outputs and update gradients therefore approximate the mathematical sigmoid at extremes; the loss itself remains unclipped.</p></details>
+    </div>
+  </section>
+
+  <section aria-labelledby="update-heading">
+    <h2 id="update-heading">4. Connect the loss to changes in both vectors</h2>
+    <div class="prose">
+      <p>A high loss does not identify which weight to change. A <b>derivative</b> measures local sensitivity: how a small change to one weight would affect loss while other weights stay fixed. Collecting those sensitivities for all weights gives the <b>gradient</b>.</p>
+      <h3>Inspect the effect of changing just one weight</h3>
+      <p>For the selected observed example, change only the first coordinate of its candidate output vector. Keep the input and all other weights fixed, and recalculate the same label-1 loss:</p>
+    </div>
+    <div class="scroll" tabindex="0" role="region" aria-label="Loss sensitivity to one output coordinate">
+      <table><caption>These probes illustrate sensitivity; they are not training updates</caption><thead><tr><th scope="col">Probe</th><th scope="col">Output weight</th><th scope="col">Observed-example loss</th></tr></thead><tbody id="sensitivityRows"></tbody></table>
+    </div>
+    <div class="prose">
+      <p>If increasing the weight increases the loss, its gradient is positive and lowering it is locally helpful. If increasing it reduces the loss, its gradient is negative and raising it is locally helpful. The gradient is not the loss or an updated weight. The code computes it by differentiation, rather than trying many small probes.</p>
+      <h3>Carry feedback backward through the calculation</h3>
+      <p>At a score, the feedback is <code>sigmoid(score) - label</code>. An output of 0.6 on label 1 gives <code>0.6 - 1 = -0.4</code>: increasing the score locally reduces loss. The same output on label 0 gives <code>0.6 - 0 = 0.6</code>: decreasing the score locally reduces loss.</p>
+      <p>That tells us about the score, not yet about a coordinate. A score includes products of input and output coordinates. If an input coordinate is negative, lowering its paired output coordinate raises their product. The chain rule combines the loss's sensitivity to the score with the score's sensitivity to each coordinate.</p>
+      <p id="gradientChain" class="formula"></p>
+      <h3>Use the sign and choose a step size</h3>
+      <p>Subtracting a small multiple of a gradient handles either sign. The <b>learning rate</b> sets that multiple. A local downhill direction does not promise improvement after a very large move.</p>
+      <p class="formula"><code>new weight = old weight - learning rate × gradient</code></p>
+      <div class="controls"><label>Learning rate <select id="rate"><option value="0">0 (no updates)</option><option value="0.01">0.01</option><option value="0.05" selected>0.05</option><option value="0.3">0.3 (larger steps)</option></select></label></div>
+      <p id="rateMeaning" class="note"></p>
+      <p>For the inspected coordinate, with learning rate <code id="rateValue"></code>:</p>
+      <p class="formula"><code id="weightChange"></code></p><p id="gradientMeaning"></p>
+      <p>The input coordinate also changes: its gradient uses the output coordinate as its multiplier. Both gradients use the values before the update. Otherwise, the second update would be based on a different starting calculation.</p>
+    </div>
+    <h3>Apply one observed update, then each noise update</h3>
+    <p class="prose">The implementation updates the observed pair first, then re-reads the center vector and updates each noise pair immediately. It does not calculate all four gradients from one frozen center vector. A repeated noise draw is another update, not a duplicate to discard.</p>
+    <p class="note">This preview changes copies of the selected checkpoint, not the main run. Each row compares that example immediately before and after its own complete update. Later rows may change earlier outputs again. Output means the sigmoid's data-versus-noise output.</p>
+    <p id="previewNoise" class="note"></p>
+    <div class="scroll" tabindex="0" role="region" aria-label="Successive observed and noise updates">
+      <table><caption>Watch what actually changes after each label's update</caption><thead><tr><th scope="col">Example</th><th scope="col">Output before</th><th scope="col">Output after</th><th scope="col">Loss before</th><th scope="col">Loss after</th></tr></thead><tbody id="updateRows"></tbody></table>
+    </div>
+    <p id="updateInterpretation" class="note"></p>
+    <p class="takeaway">The forward pass calculated scores, outputs, and losses. The backward pass connected those losses to weights. Applying the updates changes what the next forward pass will output. Without that last operation, repeating the calculations would teach the model nothing.</p>
+  </section>
+
+  <section aria-labelledby="experiment-heading">
+    <h2 id="experiment-heading">5. Repeat the updates and interpret the loss curve</h2>
+    <div class="prose">
+      <p>An <b>epoch</b> processes all 108 observed pairs in shuffled order, with three new noise samples for each pair. The curve sums the observed and noise losses for each pair, then averages those sums across the epoch. It does not average the four contributions individually.</p>
+      <p>Before useful training, scores are small and q is near 0.5. Each binary example costs about 0.693, so an observed pair plus three noise examples costs about <code>4 × 0.693 = 2.773</code>. That explains the initial scale.</p>
+    </div>
+    <div class="controls"><button id="next" type="button">Next epoch</button><button id="play" class="primary" type="button" aria-pressed="false">Play training</button><button id="end" type="button">Show epoch 200</button><button id="reset" type="button">Back to untrained</button></div>
+    <div class="progress"><label for="epoch">Epoch</label><input id="epoch" type="range" min="0" max="200" value="0"><output id="epochValue" for="epoch">0 / 200</output></div>
+    <p id="trainingStatus" class="note"></p>
+    <div class="duo">
+      <div class="panel">
+        <h3>Outputs for the selected input</h3><p id="predictionExplanation" class="note"></p>
+        <div id="predictions" class="predictions"></div>
+        <details><summary>Show remaining candidates</summary><div id="otherPredictions" class="predictions"></div></details>
+        <p class="note">Words marked * are observed contexts. Their counts: <span id="observedContexts"></span>.</p>
+        <p><b id="pairName"></b></p><div class="comparison"><p>Before training<strong id="initialOutput"></strong></p><p>Selected epoch<strong id="currentOutput"></strong></p></div>
+      </div>
+      <div class="panel">
+        <h3>Average loss over training</h3>
+        <div class="metrics"><p class="note">Epoch average loss<strong id="meanLoss"></strong></p><p class="note" id="firstLoss"></p></div>
+        <div class="scroll plot" id="lossPlot" tabindex="0" role="region" aria-label="Scrollable loss chart"></div>
+        <p id="lossReference" class="note plot-caption"></p><p id="convergence" class="note"></p>
+      </div>
+    </div>
+    <p id="trainingResult"></p>
+    <p class="note">Choose another input in <a href="#prediction-heading">the prediction section</a>. All worked examples above follow the epoch slider.</p>
+    <div class="prose">
+      <h3>Some loss reduction can happen without distinguishing words</h3>
+      <p>There are three noise labels for each observed label. A model that always outputs q = 0.25 matches that overall 1:3 ratio without learning which words fit together. Its per-pair loss would be <code>-log(0.25) - 3 × log(0.75) = 2.249</code>, already below 2.773.</p>
+      <p>That constant-output baseline is the ochre line. A falling loss alone does not prove useful context distinctions. Inspect the actual outputs too: does the model treat observed contexts differently from other candidates?</p>
+      <h3>A plateau is evidence to interpret, not a certificate</h3>
+      <p>As predictions settle into a compromise, gradients can shrink or competing updates can balance. The loss may flatten. But new noise draws can still cause fluctuations, and limited dimensions or step size can restrict improvement. The plotted losses are collected while weights change, not at one frozen model, and are not a test-set evaluation.</p>
+      <p>Set the learning rate to 0 in <a href="#update-heading">the update section</a> and replay. The embeddings and outputs stay fixed, though noise sampling can still make the recorded loss wiggle. Neither a flat curve nor fluctuations alone tell us that the model learned useful structure.</p>
+      <p>Do not compare this loss's numerical scale directly with full softmax or with another value of K. They sum different training objectives or different numbers of contributions.</p>
+    </div>
+  </section>
+
+  <section aria-labelledby="representations-heading">
+    <h2 id="representations-heading">6. Keep what the prediction task taught the vectors</h2>
+    <div class="prose">
+      <p>The selected input embedding is <code id="selectedVector"></code>. These coordinates changed through many observed and noise examples, not by comparing them with a hand-written correct vector.</p>
+      <p>Closest input embeddings by cosine similarity at this checkpoint: <strong id="similarWords"></strong>.</p>
+      <p>Cosine compares vector directions while discounting lengths. This uses <code>E</code> against <code>E</code>, unlike training, which scores <code>E</code> against <code>W</code>. Words with shared contexts can receive related updates, but the algorithm does not directly minimize distances between their input embeddings.</p>
+      <p>We can reuse the input table to compare usage patterns or provide numerical inputs to another model. Its coordinates have no fixed meanings, and lower loss on this tiny corpus does not establish human-like understanding or generalization to new text.</p>
+    </div>
+    <p class="takeaway"><b>The connection:</b> we constructed labels from data and sampling, defined which outputs agree with those labels, turned agreement into a smooth cost, and used that cost's gradients to adjust both vectors. The repeated classification task is how the embeddings get their training signal.</p>
+  </section>
+  <footer><p>Inspect the <a href="./">negative sampling math &amp; code walkthrough</a>, or revisit <a href="../01-word2vec-skipgram/intuition.html">full-softmax Word2Vec intuition</a>.</p></footer>
+</main>
+</body>
+</html>

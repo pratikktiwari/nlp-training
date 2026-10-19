@@ -7,40 +7,21 @@
 <title>Word2Vec, Step by Step</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <meta name="description" content="Watch a skip-gram Word2Vec model train in the browser, one update at a time, with every number worked out.">
+<script src="../theme.js"></script>
+<link rel="stylesheet" href="../theme.css">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,500;8..60,600;8..60,700&family=Source+Sans+3:ital,wght@0,400;0,500;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
-/* Tokens. Ink-on-paper textbook: cool paper, navy ink, one blue for the center word and one orange for the
-   context word (those two carry meaning everywhere on the page, so nothing else uses them decoratively).
+/* Warm paper, teal for the center word, ochre for the context word.
    Type: Source Serif 4 for headings, Source Sans 3 for reading, JetBrains Mono for code and numbers.
    Layout: a reading column for prose, full width for the interactive bench and the tables. */
 :root{
-  --bg:#f6f7f9; --surface:#ffffff; --sunk:#f0f2f6; --line:#dde2e9; --line-strong:#c5ccd6;
-  --fg:#18212e; --muted:#525e70; --faint:#8b94a3;
-  --center:#2357a8;   /* the center word / h */
-  --target:#c0580f;   /* the true context word */
-  --pos:#c23b3b; --neg:#2f6cc0;  /* diverging heatmap ends */
-  --g-pets:#24805e; --g-fruit:#c0580f; --g-veh:#6650c0; --g-adj:#8b94a3;
-  --hl:#fff3c4; --hl-edge:#d9a520;
-  --ink-band:#18212e; --ink-band-fg:#f3f5f8;
   --f-display:"Source Serif 4","Iowan Old Style","Georgia",serif;
   --f-body:"Source Sans 3",system-ui,-apple-system,"Segoe UI",sans-serif;
   --f-mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
   --r:6px;
 }
-@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
-  --bg:#10151c; --surface:#161d27; --sunk:#1c2430; --line:#2a3443; --line-strong:#3a4658;
-  --fg:#e6ebf1; --muted:#a0abb9; --faint:#6f7b8b;
-  --center:#6aa6f2; --target:#f19a52; --pos:#f07070; --neg:#5c9cf0;
-  --g-pets:#4fc095; --g-fruit:#f19a52; --g-veh:#a594f0; --g-adj:#7d8a98;
-  --hl:#3a3218; --hl-edge:#b8902a; --ink-band:#0b0f14; --ink-band-fg:#e6ebf1; color-scheme:dark}}
-:root[data-theme="dark"]{
-  --bg:#10151c; --surface:#161d27; --sunk:#1c2430; --line:#2a3443; --line-strong:#3a4658;
-  --fg:#e6ebf1; --muted:#a0abb9; --faint:#6f7b8b;
-  --center:#6aa6f2; --target:#f19a52; --pos:#f07070; --neg:#5c9cf0;
-  --g-pets:#4fc095; --g-fruit:#f19a52; --g-veh:#a594f0; --g-adj:#7d8a98;
-  --hl:#3a3218; --hl-edge:#b8902a; --ink-band:#0b0f14; --ink-band-fg:#e6ebf1; color-scheme:dark}
 *{box-sizing:border-box}
 [hidden]{display:none!important}
 html{scroll-behavior:smooth;scroll-padding-top:16px}
@@ -70,7 +51,6 @@ p code,li code,label code{background:var(--sunk);border:1px solid var(--line);bo
 .nav{display:flex;gap:4px 18px;flex-wrap:wrap;align-items:center;font-size:14.5px}
 .nav a{color:var(--muted);text-decoration:none}
 .nav a:hover{color:var(--fg);text-decoration:underline}
-.theme-btn{font-size:13px;padding:4px 10px}
 
 /* hero */
 .hero{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);gap:40px;align-items:center;padding-top:24px}
@@ -129,7 +109,7 @@ button:hover{border-color:var(--muted)}
 button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,a:focus-visible{outline:2px solid var(--center);outline-offset:2px}
 button.primary{background:var(--center);border-color:var(--center);color:var(--surface)}
 button.primary:hover{filter:brightness(1.08)}
-.pos{display:flex;gap:10px;align-items:center;flex:1 1 260px;min-width:0}
+.pos{display:flex;flex-wrap:wrap;gap:10px;align-items:center;flex:1 1 260px;min-width:0}
 .pos select{font:inherit;font-size:14px;background:var(--surface);color:var(--fg);border:1px solid var(--line-strong);border-radius:5px;padding:4px 6px}
 .pos input[type=range]{flex:1;min-width:80px;accent-color:var(--center)}
 .pos .mono{font-size:12px;color:var(--muted);white-space:nowrap}
@@ -212,6 +192,17 @@ svg .axis{stroke:var(--line)}
 @media (min-width:901px){.code{height:var(--bench-h,auto)}}
 .ln .t .hv.changed{color:var(--target)}
 .worked{padding:20px 22px 24px;display:flex;flex-direction:column;gap:16px}
+.step-purpose{border-left:3px solid var(--center);padding:2px 0 2px 16px;max-width:76ch;display:flex;flex-direction:column;gap:8px}
+.step-purpose .eyebrow{font-size:12px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+.step-purpose h3{font-family:var(--f-display);font-size:21px}
+.step-purpose p{font-size:15.5px;overflow-wrap:anywhere}
+.step-purpose .bridge{color:var(--muted);font-size:14px}
+.step-link{font-size:14px;color:var(--muted);border-bottom:1px solid var(--line);padding-bottom:12px;overflow-wrap:anywhere}
+.step-link span{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px}
+.learning-path{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:14px;padding-block:12px;border-block:1px solid var(--line)}
+.reading{max-width:74ch;display:flex;flex-direction:column;gap:12px}
+.experiment{border-left:3px solid var(--target);padding-left:14px;max-width:74ch;font-size:15px}
+@media(max-width:640px){.worked{padding:16px 14px}.step-purpose{padding-left:12px}.step-purpose h3{font-size:19px}}
 .wk-head{display:flex;flex-wrap:wrap;gap:6px 16px;align-items:baseline}
 .wk-head h2{font-size:22px}
 .wk-head .note{font-family:var(--f-mono);font-size:12px}
@@ -302,7 +293,7 @@ function typesetMath(ids=['worked','takeaways','pcaSec','intro']){const els=ids.
   <div class="topbar">
     <a class="brand" href="#top" id="top"><svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true"><rect x="1" y="9" width="7" height="8" rx="1.5" fill="none" stroke="var(--target)" stroke-width="2"/><rect x="10" y="9" width="7" height="8" rx="1.5" fill="var(--center)"/><rect x="19" y="9" width="6" height="8" rx="1.5" fill="none" stroke="var(--target)" stroke-width="2"/></svg>Word2Vec, step by step</a>
     <nav class="nav" aria-label="Sections">
-      <a href="../" class="home">← All chapters</a><a href="#s-idea">Key terms</a><a href="#s-setup">Sentences</a><a href="#s-step">Training loop</a><a href="#s-math">Math</a><a href="#s-run">Whole run</a><a href="#s-pca">PCA</a>
+      <a href="../" class="home">← All chapters</a><a href="intuition.html">Word2Vec intuition</a><a href="#s-idea">Overview &amp; terms</a><a href="#s-setup">Sentences</a><a href="#s-step">Training loop</a><a href="#s-math">Why &amp; math</a><a href="#s-run">Whole run</a><a href="#s-pca">PCA</a>
       <button class="theme-btn" id="bTheme" type="button" aria-label="Switch light or dark theme">Dark</button>
     </nav>
   </div>
@@ -315,7 +306,7 @@ function typesetMath(ids=['worked','takeaways','pcaSec','intro']){const els=ids.
       <ol class="howto">
         <li><span class="n">1</span><div><b>Pick some sentences</b><p>We start from a ready-made set, or type our own.</p></div></li>
         <li><span class="n">2</span><div><b>Step through the loop</b><p>Press <b>Line ▶</b> or the → key. The running line of code lights up.</p></div></li>
-        <li><span class="n">3</span><div><b>Read the math</b><p>Every formula is shown with this step's real numbers.</p></div></li>
+        <li><span class="n">3</span><div><b>Ask why, then follow the math</b><p>Use “Why this step?” to connect the purpose, formula, and real numbers.</p></div></li>
       </ol>
     </div>
     <figure class="figure" style="margin:0">
@@ -343,15 +334,24 @@ function typesetMath(ids=['worked','takeaways','pcaSec','intro']){const els=ids.
   </header>
 
   <section class="sec" id="s-idea">
+    <nav class="learning-path" aria-label="Learning journey">
+      <a href="#s-idea">1. Build intuition</a><a href="#s-setup">2. Set up an experiment</a><a href="#s-step">3. Follow the code</a><a href="#s-math">4. Connect why to math</a><a href="#s-takeaways">5. Check your takeaway</a>
+    </nav>
+    <div class="reading">
+      <h2>Why predict neighbours if we want word vectors?</h2>
+      <p>Word IDs distinguish words but do not express similarity: ID 8 is not “twice as meaningful” as ID 4. A learned vector gives us coordinates that can be compared and reused as inputs to other models.</p>
+      <p>We have no target vector for <i>cats</i>, but the sentences give us a task: predict its neighbours. If <i>cats</i> and <i>dogs</i> repeatedly need the same answers, similar representations can help them use the same output weights. The prediction task supplies the training signal; the embeddings are the useful by-product.</p>
+      <p><b>The loop:</b> look up a representation → score candidate neighbours → assign probabilities → measure the observed target's loss → trace the error back → adjust both tables. Repeating the loop can reveal patterns of usage, not human-like understanding or a guaranteed dictionary of meanings.</p>
+    </div>
     <div class="sec-head no-num"><h2>The moving parts</h2><p>These names show up in the code and in the math. We don't need to memorize them; each one is explained again where we use it.</p></div>
     <dl class="parts" id="intro">
       <div><dt>pair</dt><dd>A center word and one word next to it. All training is done one pair at a time.</dd></div>
       <div><dt>E <span class="shape">(words × D)</span></dt><dd>The embeddings. One row of D numbers per word. This is what we want in the end.</dd></div>
-      <div><dt>h</dt><dd>The center word's row of E, copied out. It is the model's current "meaning" of that word.</dd></div>
+      <div><dt>h</dt><dd>The center word's row of E, copied out. It is a learned representation of usage, not a definition of the word.</dd></div>
       <div><dt>W <span class="shape">(D × words)</span></dt><dd>A second table, one column per word, used to score how well each word fits next to the center word.</dd></div>
       <div><dt>scores = h @ W</dt><dd>One number per word. Bigger means "more likely to be a neighbour".</dd></div>
       <div><dt>softmax</dt><dd>Turns the scores into chances between 0% and 100% that add up to 100%.</dd></div>
-      <div><dt>loss = −ln(p)</dt><dd>How wrong the guess was: 0 if the real neighbour got 100%, larger the smaller its chance.</dd></div>
+      <div><dt>loss = −log(p)</dt><dd>How wrong the guess was: 0 if the real neighbour got 100%, larger the smaller its chance.</dd></div>
       <div><dt>gradient, LEARNING_RATE</dt><dd>Which way to nudge every number to lower the loss, and how big a nudge to take.</dd></div>
     </dl>
   </section>
@@ -392,6 +392,7 @@ function typesetMath(ids=['worked','takeaways','pcaSec','intro']){const els=ids.
       </dl>
       <p class="runnote" id="runnote"></p>
     </div>
+    <p class="experiment"><b>Try a controlled change.</b> First inspect the default run, then raise only EPOCHS from 5 to 50 and run again. Does the loss fall, and do words with shared neighbours group together? Increasing WINDOW changes the evidence itself; increasing D changes the capacity to represent it.</p>
   </section>
 
   <section class="sec" id="s-step">
@@ -427,7 +428,8 @@ function typesetMath(ids=['worked','takeaways','pcaSec','intro']){const els=ids.
   </section>
 
   <section class="sec" id="s-math">
-    <div class="sec-head"><span class="sec-num">3</span><h2>The math behind the highlighted line</h2><p>The formula first, then where it comes from, then the same formula with this step's real numbers. Nothing is rounded away: every table shows every word.</p></div>
+    <div class="sec-head"><span class="sec-num">3</span><h2>Why this step, then the math</h2><p>Start with the purpose and what the current result means. Then follow the original formula, derivation, and worked tables. This section follows the selected training line; displayed decimals are rounded, calculations use full precision.</p></div>
+    <p class="note"><b>Notation:</b> log means log<sub>e</sub>, the natural logarithm (base e ≈ 2.718), as in <code>np.log</code> and <code>Math.log</code>. A derivative is a local slope: the dashed tangents below show how a tiny input change affects the result, not a whole training update.</p>
     <div class="panel worked" aria-live="polite">
       <div class="wlegend"><span><i class="sw" style="background:color-mix(in oklab,var(--target) 22%,var(--surface))"></i>the context word's column</span><span><i class="sw" style="box-shadow:inset 0 0 0 2px var(--target)"></i>the number that matters</span><span><i class="sw" style="box-shadow:inset 0 0 0 2px var(--center)"></i>the model's current top pick</span></div>
       <div id="worked" style="display:flex;flex-direction:column;gap:14px;min-width:0"></div>
@@ -440,19 +442,19 @@ function typesetMath(ids=['worked','takeaways','pcaSec','intro']){const els=ids.
       <div class="panel">
         <div class="grid-head"><h3>Loss</h3>
           <label class="note" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="chk50"> <span id="chk50lbl">show what more epochs would do</span></label></div>
-        <p class="note">Lower is better. Each grey dot is one pair; the blue line is the average for each epoch.</p>
+        <p class="note">Lower is better. Each grey dot is one pair; the teal line is the average for each epoch.</p>
         <div class="viz" id="lossViz"></div>
         <div class="legend"><span><i style="background:var(--faint)"></i>loss of each pair</span><span><i style="background:var(--center)"></i>epoch average</span><span><i style="background:var(--target)"></i>current pair</span></div>
       </div>
       <div class="panel">
         <div class="grid-head"><h3>Embedding space</h3><span class="note" id="pcaNote"></span></div>
-        <p class="note">Each dot is a word. Words that the model thinks are alike sit close together.</p>
+        <p class="note">Each dot projects a normalized row of E into 2-D. Nearby dots suggest similar directions, but projection can hide differences. This is not the E-to-W comparison used to predict a context.</p>
         <div class="viz" id="pcaViz"></div>
         <div class="legend" id="pcaLegend"></div>
       </div>
       <div class="panel pred" style="grid-column:1/-1">
         <div class="grid-head"><h3>What the model predicts</h3><span class="note" id="predNote"></span></div>
-        <p class="note" style="margin:0">Each row asks the model "which words come next to this one?" using the weights at the current position (lookup, <code>h @ W</code>, softmax). A <span style="color:var(--g-pets)">green</span> guess really appears next to that word in the sentences. The last column adds up the chance given to all real neighbours; 100% would be a perfect model.</p>
+        <p class="note" style="margin:0">Each row asks the model "which words come next to this one?" using the weights at the current position (lookup, <code>h @ W</code>, softmax). A <span style="color:var(--g-pets)">green</span> guess really appears next to that word in the sentences. The last column adds the probability on all observed neighbours. Reaching 100% there would exclude unobserved words, but the probabilities among real neighbours must also match their frequencies to minimize loss.</p>
         <div class="scroll" id="predViz"></div>
       </div>
     </div>
@@ -468,12 +470,15 @@ function typesetMath(ids=['worked','takeaways','pcaSec','intro']){const els=ids.
     <div class="takeaways" id="takeaways"></div>
   </section>
 
+  <p class="experiment"><b>Before moving on:</b> can you explain why E-to-W scores train the model, while E-to-E cosine similarity compares the resulting embeddings? <a href="../02-negative-sampling/">Continue to chapter 02</a> to change the training task without changing that goal.</p>
+
   <footer class="foot">
     <p>Everything runs in the browser. The random numbers copy NumPy's <code>np.random.seed(42)</code> exactly, so the losses match the Python code line for line.</p>
     <p><a href="#top">Back to top</a></p>
   </footer>
 </div>
 
+<script src="../math-graphs.js"></script>
 <script>
 // ---- numpy legacy RandomState (MT19937 + legacy gauss + legacy shuffle), so runs match np.random.seed(42) ----
 class NpRandom{
@@ -718,6 +723,75 @@ const wCellH=()=>clamp(Math.floor(240/D),4,22);
 // ---------- stage per phase ----------
 // plain-language summary for the top card: what happens, and why it matters
 const SUM=(what,why)=>`<div class="explain"><p><b>What happens</b> ${what}</p><p><b>Why it matters</b> ${why}</p></div>`;
+function purposeHTML(compact=false){
+  const s=st(), {c,x,h,p,scores,err,gW,gh,Wb,Eb,Ea}=s, cw=esc(V[c]), xw=esc(V[x]);
+  let phase,title,why,example,next;
+  switch(S.ph){
+  case "shuffle":
+    phase='Prepare the evidence';title='Reuse the data without repeating the same order';
+    why='The model keeps its learned weights between epochs. Shuffling changes which examples influence them first; resetting total_loss starts a fresh measurement, not a fresh model.';
+    example=`There are <b>${NP}</b> pairs to visit this epoch. E and W began as small random numbers: starting both tables at zero would make both gradients zero, so nothing could learn. Seed 42 makes the random start repeatable.`;
+    next='Next we choose one observed pair. Without a fresh loss total, the chart would mix multiple epochs instead of showing progress.';break;
+  case "pair":
+    phase='Choose a training target';title='Let the text provide supervision';
+    why='We do not know the ideal embedding, but we do know which word occurred nearby. Predicting that observed context gives us a measurable task instead of inventing target coordinates.';
+    example=`Here <code>center = ${c}</code> selects <b>${cw}</b> and <code>context = ${x}</code> identifies <b>${xw}</b> as the target. These IDs select entries; their numerical distance means nothing.`;
+    next='Next we read the center vector. The target is withheld from scoring and used only to judge the prediction.';break;
+  case "h":
+    phase='Forward pass · representation';title='Retrieve the numbers that this word can learn';
+    why='A one-hot ID only identifies a word. E turns it into a compact, adjustable representation; W gives candidate contexts a separate role. Sharing W lets different center words learn from overlapping neighbours.';
+    example=`<code>h = E[${c}].copy()</code> reads ${D} coordinates for <b>${cw}</b>; its first coordinate is <code>${h[0].toFixed(5)}</code>. No coordinate has a predefined semantic meaning.`;
+    next='A lookup replaces an equivalent one-hot matrix multiplication without doing the redundant zero multiplications. Next, W turns this representation into candidate scores.';break;
+  case "scores":
+    phase='Forward pass · compatibility';title='Ask the same representation about every candidate';
+    why='A vector alone does not tell us which neighbour to predict. Each dot product combines its coordinates with one candidate’s output vector. Training can change either side to make useful pairings score differently.';
+    example=`For <b>${xw}</b>, the first contribution is <code>${h[0].toFixed(5)} × ${Wb[0][x].toFixed(5)}</code>. Adding all ${D} contributions gives <code>${scores[x].toFixed(5)}</code>. The matrix product <code>h @ W</code> does this for all ${NV} candidates.`;
+    next='A score is relative evidence, not a percentage or cosine similarity: vector lengths matter too. Next, softmax puts all scores on one probability scale.';break;
+  case "softmax":{
+    const max=Math.max(...scores),weights=scores.map(v=>Math.exp(v-max)),total=weights.reduce((a,b)=>a+b,0);
+    phase='Forward pass · prediction';title='Turn scores into competing probabilities';
+    why='A raw score is not a probability. Softmax exponentiates to get positive weights, then divides by their total. The candidates now share one budget: more probability for one leaves less for the others.';
+    example=`For <b>${xw}</b>: <code>${weights[x].toFixed(5)} / ${total.toFixed(5)}</code> gives <b>${(100*p[x]).toFixed(2)}%</b>. Subtracting the largest score before exponentiating prevents overflow without changing this share.`;
+    next=`Without division by the total, the outputs would not sum to 1. Next, loss judges the share given to ${xw}. We have a prediction, but no weights have changed.`;break;}
+  case "loss":
+    phase='Forward pass · objective';title='Give the prediction a cost we can minimize';
+    why='A prediction is not yet an instruction to learn. The negative logarithm turns the observed target’s probability into a cost: confident correct predictions cost little, while confident misses cost much more.';
+    example=`<b>${xw}</b> received <code>${p[x].toFixed(6)}</code>; <code>-log(p + 1e-12)</code> gives <b>${s.loss.toFixed(5)}</b>. Raising a target probability from 0.1 to 0.5 would lower its cost from about 2.303 to 0.693.`;
+    next='Loss tells us how costly this prediction was, not which weight caused it. Next, differentiation traces that cost back to the scores. Lower training loss is not proof of human-like word meaning.';break;
+  case "error":
+    phase='Backward pass · score sensitivity';title='Turn one loss into a direction for every score';
+    why='The loss is one number, but many scores contributed through softmax. Differentiation asks how a tiny change to each score would affect that loss. The chain rule links loss to probability and probability to score.';
+    example=`For <b>${xw}</b>, <code>error = ${p[x].toFixed(5)} - 1 = ${err[x].toFixed(5)}</code>. Its negative sign means raising this score locally lowers loss. Non-target errors are positive, asking to lower their scores.`;
+    next='These are score gradients, not weight updates. Next we translate them into sensitivities for W and h. The derivation uses ideal -log(p); the code’s epsilon is a numerical guard.';break;
+  case "gW":
+    phase='Backward pass · output weights';title='Assign each output weight its share of responsibility';
+    why='A score can only change through the weights that produced it. In score j, changing W[i,j] changes the score in proportion to h[i]. Multiplying that local effect by error[j] applies the chain rule.';
+    example=`For dimension 0 and <b>${xw}</b>: <code>${h[0].toFixed(5)} × ${err[x].toFixed(5)} = ${gW[0][x].toFixed(5)}</code>. <code>np.outer(h, error)</code> collects all ${D} × ${NV} sensitivities in W’s layout.`;
+    next='Using the error alone would miss which coordinates actually influenced each score. W has not changed yet; the center embedding needs its own gradient too.';break;
+  case "gh":
+    phase='Backward pass · input embedding';title='Bring every prediction’s feedback back to the center';
+    why='The center vector influenced all candidate scores, not just the target’s score. Each path contributes W[i,j] times error[j]; adding the paths gives the total sensitivity of the loss to coordinate i.';
+    example=`<code>gradient_h = W @ error</code> gives <code>gradient_h[0] = ${gh[0].toFixed(5)}</code>. Looking only at ${xw} would ignore probability incorrectly assigned to competing words.`;
+    next='Both gradients now describe the same pre-update prediction. Calculate them before changing W so that the backward pass does not mix old and new weights.';break;
+  case "uW":
+    phase='Parameter update · output table';title='Move opposite the direction of increasing loss';
+    why='A positive derivative says increasing a weight increases loss; a negative derivative says the reverse. Subtracting learning rate times gradient follows the locally downhill direction. Adding it would move uphill locally.';
+    example=`For W[0, ${x}]: <code>${Wb[0][x].toFixed(5)} - ${LR} × (${gW[0][x].toFixed(5)}) = ${s.Wa[0][x].toFixed(5)}</code>. All candidate columns participate; each other word’s signal is scaled by its probability.`;
+    next='The learning rate controls distance, not direction. A large finite step can overshoot, so a gradient is not a promise of improvement at every setting. Next we apply the already-computed input gradient.';break;
+  case "uE":
+    phase='Parameter update · learned representation';title='Store the lesson in the embedding we will keep';
+    why='Updating only W could improve predictions while leaving the input embeddings random. Updating E[center] makes the representation itself carry information useful for future predictions.';
+    example=`For <b>${cw}</b> coordinate 0: <code>${Eb[c][0].toFixed(5)} - ${LR} × (${gh[0].toFixed(5)}) = ${Ea[c][0].toFixed(5)}</code>. Only this row of E changes; other words receive their own input updates when they become centers.`;
+    next='The next pair uses the updated tables. Repeated shared contexts can encourage similar E vectors; they do not force identical vectors or guarantee every desired grouping.';break;
+  case "end":
+    phase='Measure progress';title='Look for a pattern across examples, not one easy pair';
+    why='Individual losses vary with the target and change as training proceeds. Averaging over an epoch gives a less noisy progress measure, without giving longer epochs a larger value just because they contain more pairs.';
+    example=`<code>${s.total.toFixed(4)} / ${NP} = ${RUN.losses[S.ep].toFixed(4)}</code> is the mean recorded during this epoch. It is not a separate evaluation with frozen final weights.`;
+    next='Use several epochs and the neighbour predictions together. A center with several observed contexts must share probability among them, so useful training does not require zero loss.';break;
+  }
+  if(compact)return `<p class="step-link"><span>${phase}</span><a href="#s-math">Why this step? ${title}</a></p>`;
+  return `<aside class="step-purpose" aria-label="Why this step?"><span class="eyebrow">${phase}</span><h3>${title}</h3><p>${why}</p><p>${example}</p><p class="bridge">${next}</p></aside>`;
+}
 function stageHTML(){
   const s=st(), {c,x,h,scores,p,loss,err,gW,gh,Wb,Eb,Wa,Ea}=s, cw=V[c], xw=V[x];
   const pair=`<div class="pairline"><span class="big"><span class="c-center">${cw}</span> → <span class="c-target">${xw}</span></span><span class="mono note">(center, context) = (${c}, ${x}) · epoch ${S.ep+1}, pair ${S.k+1} of ${NP} · update ${idx()+1} of ${NP*EPOCHS}</span></div>`;
@@ -746,8 +820,8 @@ function stageHTML(){
     return pair+`${SUM(`Turn the ${NV} scores into ${NV} chances that add up to 100%. The highest score gets the highest chance.`,`Now each word has a chance of being ${cw}'s neighbour. The model's top guesses right now: <span class="mono">${top}</span>. If every word got the same chance it would be 1/${NV} = ${(100/NV).toFixed(2)}% each (the thin line), which means the model has no idea yet.`)}
     <div><h3>probabilities <span class="shape">(${NV},)</span></h3><div class="viz">${barsSVG(p,{target:-1,ref:1/NV,min:0,label:"probabilities"})}</div></div>`;}
   case "loss":
-    return pair+`${SUM(`Look up the chance the model gave to the right answer, <span class="c-target">${xw}</span>: ${(p[x]*100).toFixed(2)}%. Turn it into a "how wrong" number with −ln: a 100% chance gives 0, and smaller chances give bigger numbers.`,`This is the number training tries to shrink. A loss of ${Math.log(NV).toFixed(2)} means "no better than guessing at random", and 0 would mean "100% sure of the right word".`)}
-    <div class="math">loss = −ln(p[${xw}]) = −ln(${p[x].toFixed(6)}) = ${loss.toFixed(6)}
+    return pair+`${SUM(`Look up the chance the model gave to the right answer, <span class="c-target">${xw}</span>: ${(p[x]*100).toFixed(2)}%. Turn it into a "how wrong" number with −log: a 100% chance gives 0, and smaller chances give bigger numbers.`,`This is the number training tries to shrink. A loss of ${Math.log(NV).toFixed(2)} means "no better than guessing at random", and 0 would mean "100% sure of the right word".`)}
+    <div class="math">loss = −log(p[${xw}]) = −log(${p[x].toFixed(6)}) = ${loss.toFixed(6)}
 total_loss = ${s.total.toFixed(4)}   (sum over ${S.k+1} pair${S.k?'s':''} so far this epoch)
 running average = ${(s.total/(S.k+1)).toFixed(4)}</div>
     <div class="viz">${lossCurveMini(p[x])}</div>`;
@@ -761,21 +835,21 @@ running average = ${(s.total/(S.k+1)).toFixed(4)}</div>
     <div><h3>gradient_W <span class="shape">(${D}, ${NV})</span></h3><div class="viz">${matrixSVG(gW,{rowLabels:dimLabels(),colLabels:V,max:m,targetCol:x,cellH:wCellH(),title:"gradient_W"})}</div></div>`;}
   case "gh":{
     const m=Math.max(...gh.map(Math.abs));
-    return pair+`${SUM(`Work out how to nudge ${cw}'s own ${D} numbers (h). Add up all ${NV} word columns of W, each weighted by that word's number from the error step.`,`The result mostly points toward <span class="c-target">${xw}</span>'s column, and a little away from the words the model wrongly gave a chance to. It uses W as it was before the next line changes it.`)}
+    return pair+`${SUM(`Calculate the loss gradient for ${cw}'s own ${D} numbers (h). Add all ${NV} columns of W, each weighted by that word's score error.`,`This gradient combines every candidate's contribution. We will subtract it to encourage the observed context relative to competing words. It uses W as it was before either table changes.`)}
     <div class="math">gradient_h = ${err[x].toFixed(4)} × W[:, ${xw}]  +  Σ (j ≠ ${xw})  p[j] × W[:, j]
            = [${vecTxt(gh,6)}]</div>
     <div style="display:flex;flex-direction:column;gap:6px;min-width:0"><h3>gradient_h <span class="shape">(${D},)</span></h3><div class="viz">${vecSVG(gh,{max:m,label:"gradient_h"})}</div></div>`;}
   case "uW":{
     const dW=Wa.map((r,i)=>r.map((v,j)=>v-Wb[i][j]));const m=Math.max(...dW.flat().map(Math.abs));
     const col=M=>M.map(r=>r[x]);let sxB=0,sxA=0;for(let i=0;i<D;i++){sxB+=h[i]*Wb[i][x];sxA+=h[i]*Wa[i][x]}
-    return pair+`${SUM(`Change W: every number takes a small step of ${LR} (LEARNING_RATE) times its nudge, in the direction that lowers the loss. <span class="c-target">${xw}</span>'s column moves toward ${cw}'s numbers; the other ${NV-1} columns move slightly away.`,`Next time the model sees <span class="c-center">${cw}</span>, ${xw} will score a bit higher and the other words a bit lower. With this pair's h, ${xw}'s score goes from <span class="mono">${sxB.toFixed(5)}</span> to <span class="mono">${sxA.toFixed(5)}</span>. The step is kept small so one pair doesn't wipe out what earlier pairs taught.`)}
+    return pair+`${SUM(`Change W by subtracting ${LR} (LEARNING_RATE) times its gradient. <span class="c-target">${xw}</span>'s column gains a multiple of h; the other ${NV-1} columns lose a probability-scaled multiple.`,`With this pair's fixed h, ${xw}'s score goes from <span class="mono">${sxB.toFixed(5)}</span> to <span class="mono">${sxA.toFixed(5)}</span>. A small learning rate limits how much one example can disturb what earlier pairs taught. The next input update also changes h, so inspect the actual combined result rather than assuming any step size is safe.`)}
     <div><h3>change in W this step <span class="shape">(${D}, ${NV})</span></h3><div class="viz">${matrixSVG(dW,{rowLabels:dimLabels(),colLabels:V,max:m,targetCol:x,cellH:wCellH(),title:"delta W"})}</div></div>
     <div class="math">W[:, ${xw}]  before [${vecTxt(col(Wb))}]
              after  [${vecTxt(col(Wa))}]</div>`;}
   case "uE":{
     const before=Eb[c], after=Ea[c];
     let dotB=0,dotA=0;for(let i=0;i<D;i++){dotB+=before[i]*Wb[i][x];dotA+=after[i]*Wa[i][x]}
-    return pair+`${SUM(`Change <span class="c-center">${cw}</span>'s row in E the same way, so it moves toward <span class="c-target">${xw}</span>'s column. Only this one row changes; the other ${NV-1} words' rows stay as they are.`,`Both sides have now moved toward each other, so the score for (${cw}, ${xw}) went from <span class="mono">${dotB.toFixed(5)}</span> to <span class="mono">${dotA.toFixed(5)}</span>. That is the whole of learning: one small step like this for every pair, epoch after epoch.`)}
+    return pair+`${SUM(`Change <span class="c-center">${cw}</span>'s row in E by subtracting its saved gradient, which combines the target and all competitors. Only this row changes; the other ${NV-1} words' rows stay as they are.`,`The score for (${cw}, ${xw}) changes from <span class="mono">${dotB.toFixed(5)}</span> to <span class="mono">${dotA.toFixed(5)}</span> after both updates. Training repeats these local corrections over many pairs. A finite step can overshoot; the calculated gradient describes the local direction, not a guarantee at every learning rate.`)}
     <div class="math">E[${cw}]  before [${vecTxt(before)}]
           − ${LR} × [${vecTxt(gh)}]
           after  [${vecTxt(after)}]</div>
@@ -797,7 +871,7 @@ function lossCurveMini(px){
   s+=`<text x="${(l+W)/2}" y="${H-1}" text-anchor="middle">p[context]</text>`;
   s+=`<path d="${d}" fill="none" stroke="var(--muted)" stroke-width="1.5"/>`;
   const ly=Math.min(7,-Math.log(px));
-  s+=`<circle cx="${xs(px)}" cy="${ys(ly)}" r="5" fill="var(--target)"/><text x="${xs(px)+9}" y="${ys(ly)+4}" class="lbl">−ln p</text>`;
+  s+=`<circle cx="${xs(px)}" cy="${ys(ly)}" r="5" fill="var(--target)"/><text x="${xs(px)+9}" y="${ys(ly)+4}" class="lbl">−log p</text>`;
   return s+'</svg>';
 }
 
@@ -819,7 +893,7 @@ function lossChart(){
   s+=`<text x="${(l+W)/2}" y="${H-4}" text-anchor="middle">epochs completed</text>`;
   const cur=idx();
   if(!ext){const every=Math.max(1,Math.ceil(RUN.steps.length/1500));RUN.steps.forEach((q,i)=>{if(i>cur||i%every)return;if(q.loss<ymin||q.loss>ymax)return;s+=`<circle cx="${xs((i+1)/NP).toFixed(1)}" cy="${ys(q.loss).toFixed(1)}" r="1.4" fill="var(--faint)" opacity=".55"/>`});}
-  const u=Math.log(NV);if(u>=ymin&&u<=ymax)s+=`<line x1="${l}" x2="${W-r}" y1="${ys(u)}" y2="${ys(u)}" stroke="var(--muted)" stroke-dasharray="4 4"/><text x="${W-r}" y="${ys(u)-5}" text-anchor="end" class="lbl">uniform guess ln ${NV} = ${Math.log(NV).toFixed(4)}</text>`;
+  const u=Math.log(NV);if(u>=ymin&&u<=ymax)s+=`<line x1="${l}" x2="${W-r}" y1="${ys(u)}" y2="${ys(u)}" stroke="var(--muted)" stroke-dasharray="4 4"/><text x="${W-r}" y="${ys(u)-5}" text-anchor="end" class="lbl">uniform guess log ${NV} = ${Math.log(NV).toFixed(4)}</text>`;
   if(RUN.floor>=ymin&&RUN.floor<=ymax) s+=`<line x1="${l}" x2="${W-r}" y1="${ys(RUN.floor)}" y2="${ys(RUN.floor)}" stroke="var(--g-pets)" stroke-dasharray="4 4"/><text x="${W-r}" y="${ys(RUN.floor)+13}" text-anchor="end" style="fill:var(--g-pets)">best possible ≈ ${RUN.floor.toFixed(2)}</text>`;
   if(ext){let d='';RUN.losses.forEach((v,i)=>d+=(i?'L':'M')+xs(i+1)+','+ys(v));s+=`<path d="${d}" fill="none" stroke="var(--faint)" stroke-width="1.5" stroke-dasharray="3 3"/>`}
   const done=S.ph==="end"?S.ep+1:S.ep;
@@ -876,7 +950,7 @@ function pcaHTML(){
   const small=d<=6, cardsOK=d<=4;
   let h=`<div class="wk-head"><span class="note">plot_embeddings(E), lines 54–66 of the code · worked on the final E of this run (after epoch ${EPOCHS})</span></div>`;
   h+=PSUM(`Each word has ${d} numbers in E, but a screen only has 2 directions. PCA (principal component analysis) finds the 2 directions in which the words differ the most, and gives every word a position along each of them. Those 2 positions are the x and y of its dot in the chart.`,
-    `It's a way to look at ${d}-number vectors without throwing away the important part. Words that are close in all ${d} numbers stay close in the picture. Five steps: make every row length 1, move the middle to 0, measure how the numbers spread, find the directions of biggest spread, and read off each word's position along them.`);
+    `It keeps as much variance as possible in two linear directions, not every useful distinction. Projection can hide distances, so nearby dots are clues rather than proof of similarity. Five steps: make every row length 1, move the middle to 0, measure the spread, find its main directions, and read off positions.`);
   if(d===2)h+=`<p class="note">With D = 2 the embeddings are already 2-D, so PCA only rotates the picture so that the widest spread lies along the horizontal axis. The steps are the same.</p>`;
   // step 1
   h+=`<h3>Step 1 · Make every row length 1 (line 55)</h3>`+PSUM(`Divide each word's row of E by its length. The length is the square root of the sum of its squared numbers.`,
@@ -982,6 +1056,38 @@ const DV=(title,steps)=>`<h3>${title}</h3><ol class="deriv">${steps.map(([t,x])=
 // symbol key: rows [tex, meaning]
 const GL=(rows,cap='What each symbol means')=>`<div class="gloss"><div class="gcap">${cap}</div>${rows.map(([s,m])=>`<div class="gs">\\(${s}\\)</div><div class="gm"><span>${m}</span></div>`).join('')}</div>`; // 2 pairs per row (1 on phones)
 const sExp=j=>{const n=Math.min(D,10),t=[...Array(n)].map((_,i)=>String.raw`h_{${i}}W_{${i},${j}}`);if(D>n)t.push(String.raw`\cdots`,String.raw`h_{${D-1}}W_{${D-1},${j}}`);return t.join(' + ')}; // s_j written out
+function derivationGraphs(){
+  const {x,h,scores,p,err,gW,gh,Wb}=st();
+  const lossAt=values=>{const m=Math.max(...values);return m+Math.log(values.reduce((sum,v)=>sum+Math.exp(v-m),0))-values[x]};
+  if(S.ph==='softmax')return MathGraphs.slope({
+    title:'How one score earns a larger probability share',
+    context:'Vary only the target score; every other score stays fixed. A positive slope means a higher target score earns more of the shared probability budget.',
+    x:scores[x],xMin:scores[x]-4,xMax:scores[x]+4,xLabel:'target score',yLabel:'probability',
+    curves:[{label:`Probability of ${V[x]}`,fn:v=>softmax(scores.map((s,j)=>j===x?v:s))[x],slope:p[x]*(1-p[x])}]
+  });
+  if(S.ph==='loss')return MathGraphs.slope({
+    title:'Why increasing the target probability lowers loss',
+    context:'This curve plots -log(p + 1e-12), including the code’s numerical guard. Its slope is -1/(p + 1e-12), approximately -1/p away from zero. A steep tangent means a small probability change matters more.',
+    x:p[x],xMin:Math.min(0.005,p[x]/2),xMax:1,xLabel:'target probability',yLabel:'loss',
+    curves:[{label:'Cross-entropy loss',fn:v=>-Math.log(v+1e-12),slope:-1/(p[x]+1e-12)}]
+  });
+  if(S.ph==='error')return MathGraphs.slope({
+    title:'The score error is the slope of the loss',
+    context:'Only the target score moves here. Softmax and the ideal -log(p) loss are recalculated at every point. The tangent slope is p - 1: gradient descent subtracts this negative value to raise the score. The implementation’s tiny loss guard is omitted in this derivation.',
+    x:scores[x],xMin:scores[x]-4,xMax:scores[x]+4,xLabel:'target score',yLabel:'loss',
+    curves:[{label:`Loss for ${V[x]}`,fn:v=>lossAt(scores.map((s,j)=>j===x?v:s)),slope:err[x]}]
+  });
+  if(S.ph==='gW'||S.ph==='gh'){
+    const output=S.ph==='gW',current=output?Wb[0][x]:h[0],slope=output?gW[0][x]:gh[0];
+    return MathGraphs.slope({
+      title:output?'An output-weight gradient is a measurable slope':'The center coordinate receives feedback through every score',
+      context:output?'Vary W[0, context] only. Its effect on the target score is scaled by h[0], giving slope h[0] × error[context]. This is one cell of the outer product.':'Vary h[0] only. Every score changes in proportion to W[0, j], so the loss slope adds all paths: sum W[0, j] × error[j]. All other coordinates remain fixed.',
+      x:current,xMin:current-1,xMax:current+1,xLabel:output?'W[0, context]':'h[0]',yLabel:'loss',
+      curves:[{label:'Ideal softmax loss',fn:v=>lossAt(scores.map((s,j)=>s+(v-current)*(output?(j===x?h[0]:0):Wb[0][j]))),slope}]
+    });
+  }
+  return '';
+}
 function workedHTML(){
   const s=st(), {c,x,h,scores,p,loss,err,gW,gh,Wb,Eb,Wa,Ea}=s, cw=V[c], xw=V[x], dd=Math.min(D,MAXD);
   const best=p.reduce((b,v,i)=>v>p[b]?i:b,0), wrongBest=p.reduce((b,v,i)=>i!==x&&(b<0||v>p[b])?i:b,-1);
@@ -1023,7 +1129,7 @@ context = ${x}  → word_to_id["${xw}"]   → selects <span class="c-target">col
     `<h3>1 · The multiplication</h3>${eq}
     <h3>2 · Every score worked out: multiply h by that word's column of W, then add</h3><p class="note">Cards follow the column order of W (alphabetical). This line only uses the center word, so every word is scored the same way. The context word is used for the first time on line 39.</p><div class="cards">${cards}</div>`+
     callouts([`Every score is h dotted with one column of W: multiply the matching entries, then add them up. The ${NV} cards above are exactly <code>h @ W</code>, one card per column.`,
-      `The highest score is <b>${V[sb]}</b> (${n5(scores[sb])}, outlined in blue). It's only an observation, since the code doesn't pick a maximum. The model doesn't know the answer yet.`,
+      `The highest score is <b>${V[sb]}</b> (${n5(scores[sb])}, outlined in teal). It's only an observation, since the code doesn't pick a maximum. The model doesn't know the answer yet.`,
       `A product is positive when h[i] and W[i, j] have the same sign. A score gets big when most dimensions agree in sign.`]);}
   case "softmax":{
     const mx=Math.max(...scores), ex=scores.map(v=>Math.exp(v-mx)), tot=ex.reduce((a,b)=>a+b,0);
@@ -1036,22 +1142,22 @@ context = ${x}  → word_to_id["${xw}"]   → selects <span class="c-target">col
       `The ${NV} probabilities add up to 1, so one word can only go up if others go down.`,
       `This is the model's full guess for ${cw}'s neighbour, made without seeing the answer. The most probable word is <b>${V[best]}</b> at ${n5(p[best])}. Uniform would be 1/${NV} = ${(1/NV).toFixed(5)}. The next line checks this guess against the real context word.`]);}
   case "loss":
-    return head("loss = −ln(p[context])","cross-entropy with a one-hot target",String.raw`L = -\sum_{j=1}^{${NV}} y_j \ln p_j = -\ln\!\left(p_{\text{${xw}}} + 10^{-12}\right)`)+
-    TB(String.raw`\begin{aligned} L &= -\ln\!\left(p_{${tw(xw)}} + 10^{-12}\right) \\ &= -\ln(${n5(p[x])}) \\ &= \boxed{${n5(loss)}} \\[6pt] \text{total_loss} &= ${n4(s.total-loss)} + ${n4(loss)} = ${n4(s.total)} \qquad (\text{pair } ${S.k+1} \text{ of } ${NP}) \end{aligned}`)+
+    return head("loss = −log(p[context])","cross-entropy with a one-hot target",String.raw`L = -\sum_{j=1}^{${NV}} y_j \log p_j = -\log\!\left(p_{\text{${xw}}} + 10^{-12}\right)`)+
+    TB(String.raw`\begin{aligned} L &= -\log\!\left(p_{${tw(xw)}} + 10^{-12}\right) \\ &= -\log(${n5(p[x])}) \\ &= \boxed{${n5(loss)}} \\[6pt] \text{total_loss} &= ${n4(s.total-loss)} + ${n4(loss)} = ${n4(s.total)} \qquad (\text{pair } ${S.k+1} \text{ of } ${NP}) \end{aligned}`)+
     GL([[String.raw`L`,`the loss for this one pair: a single number, <code>loss</code> on line 39. Lower is better.`],
       [String.raw`p_j`,`the probability the model gave word j (one entry of <code>probabilities</code> from line 36).`],
       [String.raw`p_{${tw(xw)}}`,`the probability given to the real context word, <code>probabilities[context]</code> = ${n5(p[x])}.`],
       [String.raw`y_j`,`the target: 1 for the real context word (${xw}), 0 for the other ${NV-1} words. This is <code>one_hot(context)</code>.`],
-      [String.raw`\ln`,`natural logarithm, <code>np.log</code>. ln 1 = 0, and ln u goes to −∞ as u goes to 0.`],
-      [String.raw`10^{-12}`,`the <code>1e-12</code> in the code. It only stops ln(0) from being −∞; it's far too small to change the value.`]])+
-    DV("How the loss reacts when p changes: the derivative of −ln u",[
-      [String.raw`The loss is \(-\ln u\) with \(u = p_{${tw(xw)}}\). To differentiate \(\ln u\), start from the fact that \(e\) and \(\ln\) undo each other:`,String.raw`e^{\ln u} = u`],
-      [String.raw`Differentiate both sides with respect to \(u\). The left side needs the chain rule (the derivative of \(e^{g}\) is \(e^{g}\cdot g'\)); the right side is just 1:`,String.raw`e^{\ln u}\cdot\frac{d}{du}\ln u = 1 \quad\Longrightarrow\quad u\cdot\frac{d}{du}\ln u = 1 \quad\Longrightarrow\quad \frac{d}{du}\ln u = \frac{1}{u}`],
-      [`Put the minus sign back:`,String.raw`\frac{d}{du}\bigl(-\ln u\bigr) = -\frac{1}{u}`],
+      [String.raw`\log`,`natural logarithm, <code>np.log</code>. log 1 = 0, and log u goes to −∞ as u goes to 0.`],
+      [String.raw`10^{-12}`,`the <code>1e-12</code> in the code. It only stops log(0) from being −∞; it's far too small to change the value.`]])+
+    DV("How the loss reacts when p changes: the derivative of −log u",[
+      [String.raw`The loss is \(-\log u\) with \(u = p_{${tw(xw)}}\). To differentiate \(\log u\), start from the fact that \(e\) and \(\log\) undo each other:`,String.raw`e^{\log u} = u`],
+      [String.raw`Differentiate both sides with respect to \(u\). The left side needs the chain rule (the derivative of \(e^{g}\) is \(e^{g}\cdot g'\)); the right side is just 1:`,String.raw`e^{\log u}\cdot\frac{d}{du}\log u = 1 \quad\Longrightarrow\quad u\cdot\frac{d}{du}\log u = 1 \quad\Longrightarrow\quad \frac{d}{du}\log u = \frac{1}{u}`],
+      [`Put the minus sign back:`,String.raw`\frac{d}{du}\bigl(-\log u\bigr) = -\frac{1}{u}`],
       [`For this pair the slope is:`,String.raw`\frac{\partial L}{\partial p_{${tw(xw)}}} = -\frac{1}{${n5(p[x])}} = ${n4(-1/p[x])}`],
       [String.raw`The slope is negative, so raising \(p_{${tw(xw)}}\) lowers the loss. It is steep when \(p\) is small (\(-1/0.01 = -100\)) and gentle when \(p\) is near 1 (\(-1/1 = -1\)), so a bad guess gets punished hard. But the code can't change p directly; it can only change the scores. The next step (error) carries this through the softmax to the scores.`]])+
-    callouts([String.raw`Only \(p_{${tw(xw)}}\) enters the loss. In the full cross-entropy \(-\sum_j y_j \ln p_j\), \(y_j\) is 0 everywhere except at ${xw}.`,
-      String.raw`Reference points: \(p = 1 \Rightarrow L = 0\). \(p = \tfrac{1}{${NV}} \Rightarrow L = \ln ${NV} = ${Math.log(NV).toFixed(4)}\). \(p = 0.5 \Rightarrow L = 0.693\). This pair's loss is ${loss<Math.log(NV)?'slightly better':'worse'} than a uniform guess.`]);
+    callouts([String.raw`Only \(p_{${tw(xw)}}\) enters the loss. In the full cross-entropy \(-\sum_j y_j \log p_j\), \(y_j\) is 0 everywhere except at ${xw}.`,
+      String.raw`Reference points: \(p = 1 \Rightarrow L = 0\). \(p = \tfrac{1}{${NV}} \Rightarrow L = \log ${NV} = ${Math.log(NV).toFixed(4)}\). \(p = 0.5 \Rightarrow L = 0.693\). This pair's loss is ${loss<Math.log(NV)?'slightly better':'worse'} than a uniform guess.`]);
   case "error":{
     const y=V.map((_,j)=>j===x?1:0);
     return head("error = probabilities − one_hot(context)","",String.raw`\delta_j = \frac{\partial L}{\partial s_j} = p_j - y_j, \qquad y_j = \begin{cases} 1 & j = \text{${xw}} \\ 0 & \text{otherwise} \end{cases}`)+
@@ -1061,12 +1167,12 @@ context = ${x}  → word_to_id["${xw}"]   → selects <span class="c-target">col
       [String.raw`x`,`the index of the real context word, here <b>${xw}</b> (<code>context = ${x}</code>).`],
       [String.raw`p_x`,`probability of the real context word = ${n5(p[x])}. The loss only looks at this one.`],
       [String.raw`y_j`,`1 if j is the context word, 0 otherwise (<code>one_hot(context)</code>).`],
-      [String.raw`L`,String.raw`the loss \(-\ln p_x\) from line 39.`],
+      [String.raw`L`,String.raw`the loss \(-\log p_x\) from line 39.`],
       [String.raw`\dfrac{\partial L}{\partial s_j}`,`"if I nudge score j up by a tiny amount, how much does the loss change, per unit of nudge?" Positive: raising s<sub>j</sub> increases the loss. Negative: raising it decreases the loss.`],
       [String.raw`\dfrac{\partial p_x}{\partial s_j}`,`how much the context word's probability moves when score j is nudged.`],
       [String.raw`\delta_j`,String.raw`shorthand for \(\partial L/\partial s_j\). This is the <code>error</code> array the code computes.`]])+
     DV("1 · Where p − y comes from",[
-      [`Start from the loss on line 39. The <code>1e-12</code> only guards against ln 0, so it is left out here (it changes the answer by less than 10⁻¹¹).`,String.raw`L = -\ln p_x, \qquad x = \text{${xw}}`],
+      [`Start from the ideal loss on line 39. The implementation adds <code>1e-12</code> to guard against log 0. We omit that guard in this derivation; its effect is small when the target probability is well above 1e-12, but need not be small for extreme predictions.`,String.raw`L = -\log p_x, \qquad x = \text{${xw}}`],
       [String.raw`Write \(p_x\) using the softmax from line 36. The \(-m\) shift cancels out (shown on the softmax step), so it is left out too.`,String.raw`p_x = \frac{e^{s_x}}{Z}, \qquad Z = \sum_{k=1}^{${NV}} e^{s_k} = e^{s_1} + e^{s_2} + \cdots + e^{s_{${NV}}}`],
       [String.raw`\(Z\) contains every score once, so nudging \(s_j\) changes only the term \(e^{s_j}\), and the derivative of \(e^{s}\) is \(e^{s}\):`,String.raw`\frac{\partial Z}{\partial s_j} = e^{s_j}`],
       [String.raw`Chain rule. \(L\) doesn't see the scores directly; it sees \(p_x\), which depends on the scores. So multiply "how L reacts to \(p_x\)" (derived on the loss step: \(-1/p_x\)) by "how \(p_x\) reacts to \(s_j\)":`,String.raw`\frac{\partial L}{\partial s_j} = \underbrace{\frac{\partial L}{\partial p_x}}_{-1/p_x}\cdot\frac{\partial p_x}{\partial s_j} = -\frac{1}{p_x}\cdot\frac{\partial p_x}{\partial s_j}`],
@@ -1074,7 +1180,7 @@ context = ${x}  → word_to_id["${xw}"]   → selects <span class="c-target">col
       [String.raw`<b>Case j ≠ x</b> (nudging any other word's score). The top \(e^{s_x}\) doesn't contain \(s_j\), so \(f' = 0\); only the bottom changes, with \(g' = e^{s_j}\):`,String.raw`\frac{\partial p_x}{\partial s_j} = \frac{0\cdot Z - e^{s_x}\,e^{s_j}}{Z^2} = -\frac{e^{s_x}}{Z}\cdot\frac{e^{s_j}}{Z} = -p_x\,p_j`],
       [String.raw`Both cases fit one formula once we use \(y_j\) (1 when j = x, 0 otherwise). Check: j = x gives \(p_x(1 - p_x)\), j ≠ x gives \(p_x(0 - p_j)\).`,String.raw`\frac{\partial p_x}{\partial s_j} = p_x\,(y_j - p_j)`],
       [String.raw`Plug this into the chain rule. The \(p_x\) on top cancels the \(1/p_x\):`,String.raw`\frac{\partial L}{\partial s_j} = -\frac{1}{p_x}\cdot p_x\,(y_j - p_j) = -(y_j - p_j) = \boxed{p_j - y_j}`],
-      [String.raw`A shorter route to the same answer: use \(\ln\frac{a}{b} = \ln a - \ln b\) and \(\ln e^{s} = s\) first, then differentiate. \(-s_x\) gives \(-1\) when j = x and 0 otherwise, which is \(-y_j\); \(\ln Z\) gives \(\frac{1}{Z}\cdot e^{s_j}\) by the rule from the loss step.`,String.raw`L = -\ln\frac{e^{s_x}}{Z} = -s_x + \ln Z \quad\Longrightarrow\quad \frac{\partial L}{\partial s_j} = -y_j + \frac{e^{s_j}}{Z} = p_j - y_j`]])+
+      [String.raw`A shorter route to the same answer: use \(\log\frac{a}{b} = \log a - \log b\) and \(\log e^{s} = s\) first, then differentiate. \(-s_x\) gives \(-1\) when j = x and 0 otherwise, which is \(-y_j\); \(\log Z\) gives \(\frac{1}{Z}\cdot e^{s_j}\) by the rule from the loss step.`,String.raw`L = -\log\frac{e^{s_x}}{Z} = -s_x + \log Z \quad\Longrightarrow\quad \frac{\partial L}{\partial s_j} = -y_j + \frac{e^{s_j}}{Z} = p_j - y_j`]])+
     `<h3>2 · The same chain rule with this pair's numbers, all ${NV} words</h3>`+
     `<div class="scroll">${wordTable([{label:'p',vals:p,fmt:n5},{label:'y (one-hot)',vals:y.map(String)},{label:'∂p_x/∂s_j = p_x(y−p)',vals:V.map((_,j)=>p[x]*(y[j]-p[j])),fmt:n5},{label:`∂L/∂s_j = (row above) × (−1/p_x = ${n4(-1/p[x])})`,vals:V.map((_,j)=>-p[x]*(y[j]-p[j])/p[x]),fmt:n5},{label:'error = p − y (code)',vals:err,cls:'res',key:[x],fmt:n5}],{ctx:x})}</div>`+
     `<h3>3 · What lines 43–44 compute</h3>`+
@@ -1189,7 +1295,7 @@ function takeaways(){
   const shareTxt=isFileCorpus(RUN.cfg)?'which is why cats, dogs and rabbits end up together':gl.length?`which is why ${gl.map(a=>a.join(' and ')).join(', ')} end up close together in the embedding chart`:'so they end up close together in the embedding chart';
   const verdict=gap>1?`It only fell to ${last.toFixed(3)}`:gap>0.25?`It reached ${last.toFixed(3)}`:`It got close: ${last.toFixed(3)}`;
   $('takeaways').innerHTML=`
-  <div class="panel"><h2>Why the loss starts near ${Math.log(NV).toFixed(2)}</h2><p>With ${NV} words and tiny random weights (×0.1), every score is close to 0, so softmax gives each word about 1/${NV}. The loss of a uniform guess is ln ${NV} = <span class="mono">${Math.log(NV).toFixed(4)}</span>. Epoch 1 averaged <span class="mono">${L[0].toFixed(4)}</span>${L[0]>Math.log(NV)-0.15?': the model starts out guessing':''}.</p></div>
+  <div class="panel"><h2>Why the loss starts near ${Math.log(NV).toFixed(2)}</h2><p>With ${NV} words and tiny random weights (×0.1), every score is close to 0, so softmax gives each word about 1/${NV}. The loss of a uniform guess is log ${NV} = <span class="mono">${Math.log(NV).toFixed(4)}</span>. Epoch 1 averaged <span class="mono">${L[0].toFixed(4)}</span>${L[0]>Math.log(NV)-0.15?': the model starts out guessing':''}.</p></div>
   <div class="panel"><h2>${verdict} after ${EPOCHS} epoch${EPOCHS>1?'s':''}</h2><p>The best possible average loss with WINDOW = ${RUN.cfg.WINDOW} is <span class="mono">${RUN.floor.toFixed(2)}</span>${ex.n>1?`, because a word like <code>${ex.w}</code> has ${ex.n} different neighbours, so no model can be certain which one it will see`:''}. Each update moves weights by ${LR} × a gradient, so the learning rate and the number of updates (${NP*EPOCHS}) decide how far it gets.${more}</p></div>
   <div class="panel"><h2>What each update does</h2><p>The context word's column of <code>W</code> is pulled toward <code>h</code>, every other column is pushed away in proportion to its probability, and <code>E[center]</code> is pulled toward the context column. Words that share contexts get pulled toward the same columns, ${shareTxt}.</p></div>`;
 }
@@ -1243,10 +1349,10 @@ function render(){
   document.querySelectorAll('.ln').forEach(el=>{const ph=el.dataset.ph;el.classList.toggle('on',ph===S.ph||(S.ph==="shuffle"&&ph==="epoch"))});
   const list=phasesFor(S.k), ci=list.indexOf(S.ph);
   $('phases').innerHTML=list.map((p,i)=>`<button class="ph ${i<ci?'done':''} ${p===S.ph?'on':''}" data-p="${p}">${PH_LABEL[p]}</button>`).join('');
-  $('stage').innerHTML=stageHTML();
+  $('stage').innerHTML=purposeHTML(true)+stageHTML();
   scrollCode();
   $('selEpoch').value=S.ep; $('rngStep').value=S.k; $('posTxt').textContent=`${S.k+1} / ${NP}`;
-  $('worked').innerHTML=workedHTML(); typesetMath(['worked']);
+  $('worked').innerHTML=purposeHTML()+derivationGraphs()+workedHTML(); typesetMath(['worked']);
   $('lossViz').innerHTML=lossChart(); $('pcaViz').innerHTML=pcaChart(); $('predViz').innerHTML=predTable();
   savePos();
 }
@@ -1338,7 +1444,7 @@ let timer=null;
 function stop(){if(timer){clearInterval(timer);timer=null;$('bPlay').textContent='Play'}}
 $('bPlay').onclick=()=>{if(timer){stop();return}
   $('bPlay').textContent='Pause';timer=setInterval(()=>{if(!move(1))stop()},900)};
-document.addEventListener('keydown',e=>{if(e.target.matches('input,select,textarea'))return;
+document.addEventListener('keydown',e=>{if(e.target.matches('input,select,textarea')||e.target.closest('.graph-plot')||e.target.id==='bTheme')return;
   if(e.key==='ArrowRight'){e.preventDefault();e.shiftKey?$('bPair').click():move(1)}
   else if(e.key==='ArrowLeft'){e.preventDefault();move(-1)}
   else if(e.key===' '){e.preventDefault();$('bPlay').click()}});
@@ -1346,13 +1452,6 @@ document.addEventListener('keydown',e=>{if(e.target.matches('input,select,textar
 new ResizeObserver(()=>{document.querySelector('.code').style.setProperty('--bench-h',document.querySelector('.bench').offsetHeight+'px');scrollCode()}).observe(document.querySelector('.bench'));
 setRun(loadCfg());loadPos();BOOT=false;savePos();pending();
 $('bRestart').onclick=()=>{stop();S={ep:0,k:0,ph:"shuffle"};render()};
-// light/dark switch; with no saved choice the page follows the system setting
-const isDark=()=>{const t=document.documentElement.dataset.theme;return t?t==='dark':matchMedia('(prefers-color-scheme: dark)').matches};
-const themeLabel=()=>{$('bTheme').textContent=isDark()?'Light':'Dark'};
-try{const t=localStorage.getItem('w2vtheme');if(t)document.documentElement.dataset.theme=t}catch(e){}
-themeLabel();
-$('bTheme').onclick=()=>{const t=isDark()?'light':'dark';document.documentElement.dataset.theme=t;try{localStorage.setItem('w2vtheme',t)}catch(e){}themeLabel()};
-matchMedia('(prefers-color-scheme: dark)').addEventListener('change',themeLabel);
 </script>
 
 </body>

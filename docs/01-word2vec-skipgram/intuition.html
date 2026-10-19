@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Word2Vec Intuition: From a Word to a Learned Representation</title>
+<meta name="description" content="Follow one Word2Vec example from embedding lookup and context prediction to loss, gradients, and learning over time.">
+<script src="../theme.js"></script>
+<link rel="stylesheet" href="../theme.css">
+<link rel="stylesheet" href="../intuition.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,600&family=Source+Sans+3:wght@400;600&family=JetBrains+Mono:wght@400&display=swap">
+<script src="../word2vec-intuition.js" defer></script>
+</head>
+<body data-objective="softmax">
+<main class="wrap">
+  <div class="topbar">
+    <a href="../">All chapters</a>
+    <nav aria-label="Chapter navigation"><a href="./">Word2Vec math &amp; code</a><a href="../02-negative-sampling/intuition.html">Negative sampling intuition</a><button class="theme-btn" id="bTheme" type="button" aria-label="Switch to dark theme">Dark mode</button></nav>
+  </div>
+  <header>
+    <span class="kicker">Chapter 01 / Word2Vec intuition</span>
+    <h1>From an input word to a learned representation</h1>
+    <p class="lede">Follow one example through the whole learning loop: what the model receives, how it predicts, how we judge that prediction, and what actually changes.</p>
+    <p>Read the explanation in order, then <a href="#experiment-heading">replay training</a>. Every worked value follows the selected checkpoint. The separate <a href="./">math &amp; code walkthrough</a> expands the derivations and implementation.</p>
+  </header>
+  <p id="error" class="error" role="alert" hidden></p>
+  <noscript><p class="error">Enable JavaScript for the worked values and experiment. The prose remains readable without it.</p></noscript>
+
+  <section aria-labelledby="task-heading">
+    <h2 id="task-heading">1. Give adjustable numbers a task</h2>
+    <div class="prose">
+      <p>A word ID only identifies a word. Numbering <code>cats</code> as 8 and <code>dogs</code> as 9 does not make the words meaningfully one unit apart. Instead, we give each word a small list of adjustable numbers: an <b>embedding</b>. Here the list has three coordinates.</p>
+      <p>We do not know the “correct” three numbers for cats. To learn them, we give them a job whose answers are available in the text: use a center word to predict a word beside it. These are some of the training sentences:</p>
+      <div class="sentences"><span>cats furry pets</span><span>dogs furry pets</span><span>cats playful pets</span></div>
+      <p>With a window of one, the first sentence yields <code>cats / furry</code>, <code>furry / cats</code>, <code>furry / pets</code>, and <code>pets / furry</code>. The first word is the input; the second is the observed context. Both left and right neighbours count.</p>
+      <p>For <code>cats / furry</code>, the prediction receives only <code>cats</code>. We hold back <code>furry</code> as the answer used to judge it. Feeding the answer into the prediction would defeat the task.</p>
+      <p>This creates feedback without hand-written definitions. Cats and dogs share contexts such as furry and playful, so their adjustable numbers must solve related prediction problems. Useful representations are a possible result of solving those problems, not something present in the random starting numbers.</p>
+    </div>
+    <details><summary>Training data and settings used on this page</summary>
+      <p class="note">The chapter's 27 sentences, 21 words, 108 directed pairs, window 1, D = 3, and NumPy-compatible seed 42. The default learning rate is 0.05. This page runs 200 epochs to reveal the longer trend; the script defaults to 5. Controls replay measured checkpoints, not an illustrative curve.</p>
+      <pre id="corpus" class="scroll"></pre>
+    </details>
+  </section>
+
+  <section aria-labelledby="prediction-heading">
+    <h2 id="prediction-heading">2. Build a prediction from the two weight tables</h2>
+    <p class="prose">The model stores two tables of adjustable numbers, called weights. <code>E</code> supplies the input representation. <code>W</code> supplies a vector for each candidate context. There is no dictionary of meanings hidden between them.</p>
+    <div class="controls"><label>Input word <select id="center"></select></label><label>Observed context to inspect <select id="context"></select></label></div>
+    <p class="note">The context selector chooses which answer we inspect; it does not feed that word into the prediction. Start at epoch 0, then return here after training to compare the same calculations.</p>
+    <h3>First, look up the input and candidate vectors</h3>
+    <p id="vectorLookup" class="prose"></p>
+    <p class="prose">The two tables give words different roles: “the word we were given” and “a candidate we might predict.” They are learned separately. <code>W</code> is how an input embedding is decoded into preferences for context words. When furry is a candidate, we use its column in <code>W</code>, written <code>W[:, x]</code>, not its input row in <code>E</code>. This is a design choice, not a rule that every embedding model must use two tables.</p>
+    <h3>Next, turn each input-candidate combination into a score</h3>
+    <p class="prose">We need a number that depends on both vectors, so changing either one can change the prediction. The model uses a <b>dot product</b>: multiply corresponding coordinates, then add the products. Here is that calculation for the selected pair.</p>
+    <div class="scroll" tabindex="0" role="region" aria-label="How the selected pair's score is built">
+      <table><caption>A compatibility score, using the current weights</caption><thead><tr><th scope="col">Coordinate</th><th scope="col">Input value</th><th scope="col">Candidate value</th><th scope="col">Product</th></tr></thead><tbody id="dotRows"></tbody><tfoot><tr><th scope="row" colspan="3">Add the three products: score</th><td class="number" id="currentScore"></td></tr></tfoot></table>
+    </div>
+    <p class="prose">A coordinate's product can raise or lower the total. No coordinate is assigned a meaning such as “animal.” The learned combination matters. A large dot product means the model currently favours this input-candidate pairing; it is not a percentage or proof of semantic similarity.</p>
+    <h3>Finally, make the scores compete using softmax</h3>
+    <p class="prose">We repeat that score calculation for every vocabulary word. Raw scores can be negative and do not sum to 1, so they are not probabilities. <b>Softmax</b> first exponentiates the scores to make positive weights, then divides each by their total. Here <code>exp(s)</code> means e raised to the power s, with e approximately 2.718: exp(0) is 1 and exp(1) is 2.718.</p>
+    <p class="formula"><code>candidate probability = exp(candidate score) / sum of exp(all 21 scores)</code></p>
+    <p class="prose">A higher score gets a bigger share. Raising one candidate's score also reduces the shares available to its competitors. This is useful because the output is a probability distribution over which context word occurs in one example, not 21 independent yes/no decisions.</p>
+    <p class="prose">Exponentials remain positive even for negative scores and change smoothly when scores change. Dividing raw scores by their sum would not have those properties: it could produce negative probabilities or divide by zero. Softmax also ignores a common shift of all scores, so it expresses relative preferences rather than treating the absolute score zero as special.</p>
+    <div id="transformExample"></div>
+    <p class="takeaway">Prediction uses only the input word and the current weights: lookup &rarr; all candidate scores &rarr; softmax probabilities. We do not need the correct context or a loss to make a prediction. We need them to learn from it.</p>
+  </section>
+
+  <section aria-labelledby="loss-heading">
+    <h2 id="loss-heading">3. Give the observed answer a numerical cost</h2>
+    <div class="prose">
+      <p>Now reveal the observed context. If it is furry, assigning furry 40% is better than assigning it 5%, even if another word ranks first in both cases. A simple right/wrong flag would miss that improvement.</p>
+      <p>A <b>loss</b> measures the cost of the prediction. We want it small when the model assigns the observed answer a high probability, large when it assigns a low one, and smooth enough to tell us whether small weight changes help.</p>
+      <h3>Cross-entropy connects that cost to the probability of the data</h3>
+      <p>Imagine two training examples. A model assigns their observed contexts probabilities 0.2 and 0.5. Under the per-example likelihood model, their combined probability is <code>0.2 × 0.5 = 0.1</code>. Improving the first prediction to 0.4 doubles it to <code>0.4 × 0.5 = 0.2</code>.</p>
+      <p>We want to increase that likelihood. Taking the negative logarithm turns a product into a sum of costs that we can minimize: <code>-log(0.2) - log(0.5) = -log(0.1)</code>. This also avoids multiplying long strings of tiny probabilities. The model treats pairs as individual supervised examples; this is not a claim that real language observations are independent.</p>
+      <p>For one observed context, this negative log-likelihood is the <b>cross-entropy loss</b>. It is not the only possible loss, but it matches this categorical prediction task:</p>
+      <p class="formula"><code>loss = -log(probability assigned to the observed context + 10<sup>-12</sup>)</code></p>
+      <p>The logarithm reverses exponentiation: log(0.5) is about -0.693 because e raised to -0.693 is about 0.5. Probabilities below 1 need negative powers; the minus sign turns these into positive costs. Log means base e throughout.</p>
+      <p>A target probability of 0.01 costs about 4.605; 0.5 costs 0.693; 0.9 costs 0.105. Confident mistakes therefore cost much more than moderately uncertain predictions. The tiny guard avoids log(0); it is not an extra target.</p>
+      <h3>The selected example, with this checkpoint's actual output</h3>
+      <p id="lossMeaning"></p>
+      <p>Observed-example loss: <strong class="number" id="observedLoss"></strong>.</p>
+      <h3>One input can have several correct contexts</h3>
+      <p>Cats is paired with furry, playful, and gentle equally often in these sentences. A model that always gives furry 100% would make the other two examples extremely costly. If it could assign the ideal distribution for cats, each would receive one third. Each such example would then cost <code>-log(1/3) = 1.099</code>, not zero.</p>
+      <p class="takeaway">The objective is not certainty about one favourite neighbour. It is a distribution that assigns probability in line with observed context frequencies. Lower loss means better fit to that task, not a direct measurement of the quality of every embedding.</p>
+    </div>
+  </section>
+
+  <section aria-labelledby="update-heading">
+    <h2 id="update-heading">4. Measure sensitivity, then change the weights</h2>
+    <div class="prose">
+      <p>The loss tells us how costly the prediction was. It does not tell us which of the many weights caused that cost. A <b>derivative</b> measures local sensitivity: how much the loss would change if one weight changed a little while the others stayed fixed. Collecting those sensitivities for all the weights gives a <b>gradient</b>.</p>
+      <h3>First, inspect just one weight</h3>
+      <p>Keep the selected input and all other weights fixed. Change only the first coordinate of the observed context's output vector. Recalculate the same observed-example loss:</p>
+    </div>
+    <div class="scroll" tabindex="0" role="region" aria-label="Loss sensitivity to changing one weight">
+      <table><caption>These are probes, not training steps</caption><thead><tr><th scope="col">Probe</th><th scope="col">Output weight</th><th scope="col">Observed-example loss</th></tr></thead><tbody id="sensitivityRows"></tbody></table>
+    </div>
+    <div class="prose">
+      <p>If raising the weight raises the loss, its gradient is positive: move the weight down. If raising it lowers the loss, the gradient is negative: move it up. The gradient is neither the loss itself nor a new weight; it describes the local relationship between them. The probes illustrate that relationship; the training code obtains it by differentiation rather than testing lots of small changes.</p>
+      <h3>Connect the loss back through the score</h3>
+      <p>For the observed context's score, the feedback is <code>probability - 1</code>; for every other score it is <code>probability - 0</code>. If the observed word has probability 0.2, its score feedback is -0.8: increasing that score lowers the loss. A competitor with probability 0.1 has feedback +0.1: decreasing its score lowers the loss.</p>
+      <p>But “raise the score” does not mean “raise every coordinate.” In the dot product, an output coordinate is multiplied by an input coordinate. If that input value is negative, lowering the output coordinate can raise the score. The chain rule multiplies score feedback by the coordinate's effect on that score.</p>
+      <p id="gradientChain" class="formula"></p>
+      <p class="note">As in the chapter code, this feedback is the standard softmax cross-entropy gradient. It does not separately differentiate the tiny numerical guard inside the displayed loss.</p>
+      <h3>Take a small step in the locally helpful direction</h3>
+      <p>Subtracting the gradient handles both signs. The <b>learning rate</b> controls how far to move; a gradient is a local guide, not a guarantee for an arbitrarily large step.</p>
+      <p class="formula"><code>new weight = old weight - learning rate × gradient</code></p>
+      <div class="controls"><label>Learning rate <select id="rate"><option value="0">0 (no updates)</option><option value="0.01">0.01</option><option value="0.05" selected>0.05</option><option value="0.3">0.3 (larger steps)</option></select></label></div>
+      <p id="rateMeaning" class="note"></p>
+      <p>For the inspected output coordinate, with learning rate <code id="rateValue"></code>:</p>
+      <p class="formula"><code id="weightChange"></code></p><p id="gradientMeaning"></p>
+      <p>Training does this for every relevant coordinate, not just the one we inspected. It changes the input embedding and the output vectors using gradients calculated from the pre-update weights. The input gradient combines feedback from all 21 candidate scores.</p>
+    </div>
+    <h3>Recalculate the prediction after that complete update</h3>
+    <p class="note">This preview changes copies of the selected checkpoint, not the main run. It uses one selected training example and updates all the relevant weights. Output means the observed context's softmax probability.</p>
+    <div class="scroll" tabindex="0" role="region" aria-label="Prediction and loss before and after one update">
+      <table><caption>One complete update, evaluated on the same example</caption><thead><tr><th scope="col">Context</th><th scope="col">Output before</th><th scope="col">Output after</th><th scope="col">Loss before</th><th scope="col">Loss after</th></tr></thead><tbody id="updateRows"></tbody></table>
+    </div>
+    <p id="updateInterpretation" class="note"></p>
+    <p class="takeaway">We have closed one loop: weights produce a prediction; the observed answer supplies a loss; gradients connect that loss to the weights; changing the weights changes the next prediction. Keeping the weights fixed would leave behaviour unchanged.</p>
+  </section>
+
+  <section aria-labelledby="experiment-heading">
+    <h2 id="experiment-heading">5. Repeat the loop and watch learning accumulate</h2>
+    <div class="prose">
+      <p>One small adjustment is not the whole task. The next pair may have the same center but a different context, or involve a different word. Its feedback can reinforce or partly undo earlier adjustments. An <b>epoch</b> is one pass through all 108 pairs, in shuffled order.</p>
+      <p>The chart averages losses recorded as those updates happen within an epoch. It is not a test-set score or an evaluation of all pairs at one frozen final checkpoint. Keeping the selected word fixed lets us compare its predictions as the rest of the training loop proceeds.</p>
+    </div>
+    <div class="controls"><button id="next" type="button">Next epoch</button><button id="play" class="primary" type="button" aria-pressed="false">Play training</button><button id="end" type="button">Show epoch 200</button><button id="reset" type="button">Back to untrained</button></div>
+    <div class="progress"><label for="epoch">Epoch</label><input id="epoch" type="range" min="0" max="200" value="0"><output id="epochValue" for="epoch">0 / 200</output></div>
+    <p id="trainingStatus" class="note"></p>
+    <div class="duo">
+      <div class="panel">
+        <h3>Predictions for the selected input</h3><p id="predictionExplanation" class="note"></p>
+        <div id="predictions" class="predictions"></div>
+        <details><summary>Show remaining candidates</summary><div id="otherPredictions" class="predictions"></div></details>
+        <p class="note">Observed contexts (counts): <span id="observedContexts"></span>.</p>
+        <p><b id="pairName"></b></p><div class="comparison"><p>Before training<strong id="initialOutput"></strong></p><p>Selected epoch<strong id="currentOutput"></strong></p></div>
+      </div>
+      <div class="panel">
+        <h3>Average loss over training</h3>
+        <div class="metrics"><p class="note">Epoch average loss<strong id="meanLoss"></strong></p><p class="note" id="firstLoss"></p></div>
+        <div class="scroll plot" id="lossPlot" tabindex="0" role="region" aria-label="Scrollable loss chart"></div>
+        <p id="lossReference" class="note plot-caption"></p><p id="convergence" class="note"></p>
+      </div>
+    </div>
+    <p id="trainingResult"></p>
+    <p class="note">The selected input and context can be changed in <a href="#prediction-heading">the prediction section</a>. All worked values above follow this epoch slider.</p>
+    <div class="prose">
+      <h3>Read a flattening curve carefully</h3>
+      <p>As the model fits the task, many gradients become smaller or conflicting updates balance out, so the average loss may change less. That is what we look for as evidence of convergence. A plateau does not prove we found the best weights: three-dimensional vectors limit the available predictions, and the step size also affects the result.</p>
+      <p>Try learning rate 0 in <a href="#update-heading">the update section</a>, then replay. Its predictions stay unchanged. A flat curve by itself is therefore not evidence of learning. Check both the loss trend and how the model's outputs changed from their starting values.</p>
+    </div>
+  </section>
+
+  <section aria-labelledby="representations-heading">
+    <h2 id="representations-heading">6. Keep the representation learned along the way</h2>
+    <div class="prose">
+      <p>The selected word's input embedding is now <code id="selectedVector"></code>. It changed because it repeatedly participated in the prediction task, not because anyone supplied its correct coordinates.</p>
+      <p>Closest input embeddings by cosine similarity at this checkpoint: <strong id="similarWords"></strong>.</p>
+      <p>Cosine compares the directions of two input vectors while discounting their lengths. This is an <code>E</code>-to-<code>E</code> comparison, unlike the <code>E</code>-to-<code>W</code> scores used for prediction. Words with shared context patterns can receive related training signals and end up with similar directions; this is not a direct distance-minimization rule.</p>
+      <p>The numbers can be reused for comparison or as inputs to another model. Their coordinates have no assigned meanings, the representation is not unique, and success on these toy sentences is not evidence of human-like understanding or good performance on new text.</p>
+    </div>
+    <p class="takeaway"><b>The connection:</b> we wanted useful word numbers, gave them a context-prediction task, defined what a better prediction means, and used its gradients to change those numbers. The task is the teaching signal; the embeddings are the reusable result.</p>
+  </section>
+  <footer><p>Explore the <a href="./">Word2Vec math &amp; code walkthrough</a>, or continue to <a href="../02-negative-sampling/intuition.html">negative sampling intuition</a>.</p></footer>
+</main>
+</body>
+</html>
