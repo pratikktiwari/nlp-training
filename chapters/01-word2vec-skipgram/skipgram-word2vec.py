@@ -195,11 +195,6 @@ for epoch in range(EPOCHS):
     np.random.shuffle(pairs)
     total_loss = 0
 
-    print("-----" * 10)
-    append_output("-----" * 10)
-    print(f"\nEpoch {epoch + 1}/{EPOCHS}, Total Loss: {total_loss / len(pairs):.4f}")
-    append_output(f"\nEpoch {epoch + 1}/{EPOCHS}, Total Loss: {total_loss / len(pairs):.4f}")
-    
     for center, context in pairs:
 
         # Forward pass
@@ -207,65 +202,19 @@ for epoch in range(EPOCHS):
         scores = h @ W
         probabilities = softmax(scores)
 
-        
-        print(f"({center}, {context}) = ({id_to_word[center]}, {id_to_word[context]})")
-        append_output(f"({center}, {context}) = ({id_to_word[center]}, {id_to_word[context]})")
-        print("E[center] = h = ")
-        append_output("E[center] = h = ")
-        pprint(h)
-        append_output(h, pretty=True)
-        print("scores = ")
-        append_output("scores = ")
-        pprint(scores)
-        append_output(scores, pretty=True)
-        print("probabilities = ")
-        append_output("probabilities = ")
-        pprint(probabilities)
-        append_output(probabilities, pretty=True)
-
         # Cross-entropy loss
         loss = -np.log(probabilities[context] + 1e-12)
         total_loss += loss
-
-        print("loss = ")
-        append_output("loss = ")
-        pprint(loss)
-        append_output(loss, pretty=True)
 
         # Backpropagation
         error = probabilities.copy()
         error[context] -= 1
 
-        print("error = ")
-        append_output("error = ")
-        pprint(error)
-        append_output(error, pretty=True)
-
         gradient_W = np.outer(h, error)
         gradient_h = W @ error
 
-        print("gradient_W = ")
-        append_output("gradient_W = ")
-        pprint(gradient_W)
-        append_output(gradient_W, pretty=True)
-        print("gradient_h = ")
-        append_output("gradient_h = ")
-        pprint(gradient_h)
-        append_output(gradient_h, pretty=True)
-
-        print("Updating W and E[center] with learning rate =", LEARNING_RATE)
-        append_output("Updating W and E[center] with learning rate =", LEARNING_RATE)
         W -= LEARNING_RATE * gradient_W
         E[center] -= LEARNING_RATE * gradient_h
-
-        print("Updated W = ")
-        append_output("Updated W = ")
-        pprint(W)
-        append_output(W, pretty=True)
-        print("Updated E[center] = ")
-        append_output("Updated E[center] = ")
-        pprint(E[center])
-        append_output(E[center], pretty=True)
 
     losses.append(total_loss / len(pairs))
     print(f"End of epoch {epoch + 1}, Total Loss: {total_loss / len(pairs):.4f}")

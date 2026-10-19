@@ -212,15 +212,7 @@ for epoch in range(EPOCHS):
     np.random.shuffle(pairs)
     total_loss = 0
 
-    print("-----" * 10)
-    append_output("-----" * 10)
-    print(f"\nEpoch {epoch + 1}/{EPOCHS}")
-    append_output(f"\nEpoch {epoch + 1}/{EPOCHS}")
-
     for center, context in pairs:
-
-        print(f"({center}, {context}) = ({id_to_word[center]}, {id_to_word[context]})")
-        append_output(f"({center}, {context}) = ({id_to_word[center]}, {id_to_word[context]})")
 
         # ---- Positive pair: the real context word should get a high score ----
         h = E[center].copy()
@@ -238,35 +230,11 @@ for epoch in range(EPOCHS):
         gradient_h = error * u
         gradient_u = error * h
 
-        print("E[center] = h = ")
-        append_output("E[center] = h = ")
-        pprint(h)
-        append_output(h, pretty=True)
-        print("W[context] = u = ")
-        append_output("W[context] = u = ")
-        pprint(u)
-        append_output(u, pretty=True)
-        print(f"score = h · u = {score:.6f}, sigmoid(score) = {sigmoid(score):.6f}")
-        append_output(f"score = h · u = {score:.6f}, sigmoid(score) = {sigmoid(score):.6f}")
-        print(f"positive loss = {loss:.6f}, error = {error:.6f}")
-        append_output(f"positive loss = {loss:.6f}, error = {error:.6f}")
-        print("gradient_h = ")
-        append_output("gradient_h = ")
-        pprint(gradient_h)
-        append_output(gradient_h, pretty=True)
-        print("gradient_u = ")
-        append_output("gradient_u = ")
-        pprint(gradient_u)
-        append_output(gradient_u, pretty=True)
-
         E[center] -= LEARNING_RATE * gradient_h
         W[context] -= LEARNING_RATE * gradient_u
 
         # ---- Negative pairs: K random words should get a low score ----
         negatives = sample_negatives(context, K)
-
-        print("negatives =", [f"{neg} ({id_to_word[neg]})" for neg in negatives])
-        append_output("negatives =", [f"{neg} ({id_to_word[neg]})" for neg in negatives])
 
         for neg in negatives:
             # re-read h, because the previous step already moved E[center]
@@ -284,16 +252,8 @@ for epoch in range(EPOCHS):
             gradient_h = error_neg * u_neg
             gradient_u_neg = error_neg * h
 
-            print(f"  negative {id_to_word[neg]}: score = {score_neg:.6f}, loss = {loss_neg:.6f}, error = {error_neg:.6f}")
-            append_output(f"  negative {id_to_word[neg]}: score = {score_neg:.6f}, loss = {loss_neg:.6f}, error = {error_neg:.6f}")
-
             E[center] -= LEARNING_RATE * gradient_h
             W[neg] -= LEARNING_RATE * gradient_u_neg
-
-        print("Updated E[center] = ")
-        append_output("Updated E[center] = ")
-        pprint(E[center])
-        append_output(E[center], pretty=True)
 
     # average loss per real pair (each real pair adds 1 positive + K negative terms)
     losses.append(total_loss / len(pairs))

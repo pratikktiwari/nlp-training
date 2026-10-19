@@ -1,6 +1,6 @@
 # 01 · Word2Vec: skip-gram
 
-**Interactive walkthrough:** [docs/01-word2vec-skipgram](../../docs/01-word2vec-skipgram/index.html) steps through every line of the training loop, with every number worked out.
+**Interactive walkthrough:** [https://pratikktiwari.github.io/text-nn-from-scratch/01-word2vec-skipgram/](https://pratikktiwari.github.io/text-nn-from-scratch/01-word2vec-skipgram/) (source: [docs/01-word2vec-skipgram](../../docs/01-word2vec-skipgram/index.html)) steps through every line of the training loop, with every number worked out.
 
 ## What we build
 

@@ -1,28 +1,30 @@
 # nlp-training
 
+**Live site:** https://pratikktiwari.github.io/text-nn-from-scratch/
+
 A step-by-step path from word embeddings to GPT-2, built from scratch. Each chapter adds one idea on top of the previous one and comes in three parts:
 
 - **Concepts**: the chapter's `README.md`. It covers the intuition first, then the math with every step derived, then a walk through the code.
 - **Code**: small, runnable scripts. NumPy first so every gradient is written by hand; PyTorch once the math is clear.
-- **Visualization**: an interactive page that replays a real training run line by line. All pages are published from [`docs/`](docs/) with GitHub Pages.
+- **Visualization**: an interactive page that replays a real training run line by line. All pages are published from [`docs/`](docs/) with GitHub Pages at [https://pratikktiwari.github.io/text-nn-from-scratch/](https://pratikktiwari.github.io/text-nn-from-scratch/).
 
 ## Roadmap
 
 | # | Chapter | What it adds | Status |
 |---|---|---|---|
-| 01 | [Word2Vec: skip-gram](chapters/01-word2vec-skipgram/) | embeddings, softmax, cross-entropy, backprop by hand | ✅ code · ✅ viz · ✅ notes |
-| 02 | [Negative sampling](chapters/02-negative-sampling/) | why full softmax is slow; sigmoid plus k "wrong" words | ✅ code · ✅ viz · notes next |
-<!-- | 03 | Bigram language model | the first model that predicts the next token | planned |
-| 04 | MLP language model | a context window, batches, train/validation split | planned |
-| 05 | RNN language model | a hidden state carried through time; backprop through time | planned |
-| 06 | LSTM and GRU | gates that keep gradients from vanishing (switch to PyTorch) | planned |
-| 07 | Autograd | build a tiny autograd engine, then use PyTorch's | planned |
-| 08 | Attention | seq2seq plus attention; query, key and value | planned |
-| 09 | Transformer block | self-attention, multi-head, LayerNorm, residuals, positions | planned |
-| 10 | BPE tokenizer | byte-pair encoding, the tokenizer GPT-2 uses | planned |
-| 11 | Mini GPT | a small character-level GPT | planned |
-| 12 | GPT-2 (124M) | reproduce GPT-2 small and compare with OpenAI's weights | planned |
-| 13+ | Beyond | fine-tuning, LoRA, KV cache, sampling, RLHF/DPO | planned | -->
+| 01 | [Word2Vec: skip-gram](chapters/01-word2vec-skipgram/) | embeddings, softmax, cross-entropy, backprop by hand |
+| 02 | [Negative sampling](chapters/02-negative-sampling/) | why full softmax is slow; sigmoid plus k "wrong" words |
+<!-- | 03 | Bigram language model | the first model that predicts the next token |
+| 04 | MLP language model | a context window, batches, train/validation split |
+| 05 | RNN language model | a hidden state carried through time; backprop through time |
+| 06 | LSTM and GRU | gates that keep gradients from vanishing (switch to PyTorch) |
+| 07 | Autograd | build a tiny autograd engine, then use PyTorch's |
+| 08 | Attention | seq2seq plus attention; query, key and value |
+| 09 | Transformer block | self-attention, multi-head, LayerNorm, residuals, positions |
+| 10 | BPE tokenizer | byte-pair encoding, the tokenizer GPT-2 uses |
+| 11 | Mini GPT | a small character-level GPT |
+| 12 | GPT-2 (124M) | reproduce GPT-2 small and compare with OpenAI's weights |
+| 13+ | Beyond | fine-tuning, LoRA, KV cache, sampling, RLHF/DPO | -->
 
 ## Layout
 
@@ -54,4 +56,4 @@ python skipgram-word2vec.py
 
 ## GitHub Pages
 
-In the repository's **Settings → Pages**, set the source to the main branch and the `/docs` folder. The landing page is `docs/index.html`, and each chapter's visualization is served at `/<chapter-folder>/`.
+In the repository's **Settings → Pages**, set the source to the main branch and the `/docs` folder. The landing page is `docs/index.html`, and each chapter's visualization is served at `/<chapter-folder>/`, for example [https://pratikktiwari.github.io/text-nn-from-scratch/01-word2vec-skipgram/](https://pratikktiwari.github.io/text-nn-from-scratch/01-word2vec-skipgram/) and [https://pratikktiwari.github.io/text-nn-from-scratch/02-negative-sampling/](https://pratikktiwari.github.io/text-nn-from-scratch/02-negative-sampling/).
