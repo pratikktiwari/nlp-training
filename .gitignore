@@ -1,0 +1,9 @@
+archive
+.venv*
+__pycache__/
+*.pyc
+.DS_Store
+
+# run logs and plots
+outputs/
+*.output_*.txt
