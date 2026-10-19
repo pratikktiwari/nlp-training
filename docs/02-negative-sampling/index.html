@@ -1,0 +1,1248 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>body{margin:0}</style>
+<title>Negative Sampling, Step by Step</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="Watch skip-gram Word2Vec with negative sampling train in the browser, one update at a time, with every number worked out.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,500;8..60,600;8..60,700&family=Source+Sans+3:ital,wght@0,400;0,500;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Tokens. Ink-on-paper textbook: cool paper, navy ink, one blue for the center word and one orange for the
+   context word (those two carry meaning everywhere on the page, so nothing else uses them decoratively).
+   Type: Source Serif 4 for headings, Source Sans 3 for reading, JetBrains Mono for code and numbers.
+   Layout: a reading column for prose, full width for the interactive bench and the tables. */
+:root{
+  --bg:#f6f7f9; --surface:#ffffff; --sunk:#f0f2f6; --line:#dde2e9; --line-strong:#c5ccd6;
+  --fg:#18212e; --muted:#525e70; --faint:#8b94a3;
+  --center:#2357a8;   /* the center word / h */
+  --target:#c0580f;   /* the true context word */
+  --pos:#c23b3b; --neg:#2f6cc0;  /* diverging heatmap ends */
+  --g-pets:#24805e; --g-fruit:#c0580f; --g-veh:#6650c0; --g-adj:#8b94a3;
+  --hl:#fff3c4; --hl-edge:#d9a520;
+  --ink-band:#18212e; --ink-band-fg:#f3f5f8;
+  --f-display:"Source Serif 4","Iowan Old Style","Georgia",serif;
+  --f-body:"Source Sans 3",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --r:6px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#10151c; --surface:#161d27; --sunk:#1c2430; --line:#2a3443; --line-strong:#3a4658;
+  --fg:#e6ebf1; --muted:#a0abb9; --faint:#6f7b8b;
+  --center:#6aa6f2; --target:#f19a52; --pos:#f07070; --neg:#5c9cf0;
+  --g-pets:#4fc095; --g-fruit:#f19a52; --g-veh:#a594f0; --g-adj:#7d8a98;
+  --hl:#3a3218; --hl-edge:#b8902a; --ink-band:#0b0f14; --ink-band-fg:#e6ebf1; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#10151c; --surface:#161d27; --sunk:#1c2430; --line:#2a3443; --line-strong:#3a4658;
+  --fg:#e6ebf1; --muted:#a0abb9; --faint:#6f7b8b;
+  --center:#6aa6f2; --target:#f19a52; --pos:#f07070; --neg:#5c9cf0;
+  --g-pets:#4fc095; --g-fruit:#f19a52; --g-veh:#a594f0; --g-adj:#7d8a98;
+  --hl:#3a3218; --hl-edge:#b8902a; --ink-band:#0b0f14; --ink-band-fg:#e6ebf1; color-scheme:dark}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html{scroll-behavior:smooth;scroll-padding-top:16px}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+body{background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:16px;line-height:1.6;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1280px;margin:0 auto;padding-block:8px 72px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:56px}
+h1,h2,h3{text-wrap:balance;margin:0}
+h1,h2{font-family:var(--f-display);font-weight:600;letter-spacing:-.01em}
+h1{font-size:clamp(32px,4.6vw,50px);line-height:1.08}
+h2{font-size:clamp(23px,2.4vw,28px);line-height:1.2}
+h3{font-family:var(--f-body);font-size:15.5px;font-weight:600;color:var(--fg);line-height:1.35}
+p{margin:0}
+a{color:var(--center);text-underline-offset:3px}
+.mono,code{font-family:var(--f-mono);font-size:.86em;font-variant-numeric:tabular-nums}
+p code,li code,label code{background:var(--sunk);border:1px solid var(--line);border-radius:4px;padding:0 4px}
+.lede{max-width:66ch;color:var(--muted);font-size:18px;line-height:1.6}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{font-family:var(--f-mono);font-size:12.5px;padding:4px 9px;border:1px solid var(--line);border-radius:4px;background:var(--surface)}
+.chip b{font-weight:600;color:var(--fg)}
+.c-center{color:var(--center);font-weight:600}
+.c-target{color:var(--target);font-weight:600}
+
+/* top bar */
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:12px 20px;flex-wrap:wrap;padding-block:16px;border-bottom:1px solid var(--line)}
+.brand{font-family:var(--f-display);font-weight:600;font-size:18px;color:var(--fg);text-decoration:none;display:flex;align-items:center;gap:10px}
+.brand svg{flex:none}
+.nav{display:flex;gap:4px 18px;flex-wrap:wrap;align-items:center;font-size:14.5px}
+.nav a{color:var(--muted);text-decoration:none}
+.nav a:hover{color:var(--fg);text-decoration:underline}
+.theme-btn{font-size:13px;padding:4px 10px}
+
+/* hero */
+.hero{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);gap:40px;align-items:center;padding-top:24px}
+@media (max-width:900px){.hero{grid-template-columns:minmax(0,1fr);gap:28px}}
+.hero-text{display:flex;flex-direction:column;gap:18px;min-width:0}
+.kicker{font-size:14px;font-weight:600;color:var(--center);letter-spacing:.02em}
+.figure{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:18px 18px 14px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.figure svg{width:100%;height:auto;display:block}
+.figure figcaption,.figcap{font-size:14px;color:var(--muted)}
+.fig-word{font-family:var(--f-display);font-size:22px;font-weight:600}
+.howto{margin:0;padding:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+@media (max-width:760px){.howto{grid-template-columns:minmax(0,1fr)}}
+.howto li{list-style:none;padding:18px 20px 18px 0;display:flex;gap:14px;min-width:0}
+.howto li+li{padding-left:20px;border-left:1px solid var(--line)}
+@media (max-width:760px){.howto li+li{padding-left:0;border-left:0;border-top:1px solid var(--line)}}
+.howto .n{font-family:var(--f-display);font-size:26px;font-weight:600;color:var(--faint);line-height:1}
+.howto div>b{display:block;margin-bottom:2px}
+p.explain{max-width:75ch}
+.howto p{font-size:15px;color:var(--muted)}
+
+/* glossary of the moving parts */
+.parts{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,250px),1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+.parts>div{background:var(--surface);padding:14px 16px;display:flex;flex-direction:column;gap:4px;min-width:0}
+.parts dt{font-family:var(--f-mono);font-weight:600;font-size:14px}
+.parts dd{margin:0;font-size:14.5px;color:var(--muted)}
+
+/* numbered sections (the order is the order we use the page in) */
+.sec{display:flex;flex-direction:column;gap:20px;min-width:0}
+.sec-head{display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px 16px;align-items:baseline;max-width:80ch}
+.sec-num{font-family:var(--f-display);font-size:clamp(23px,2.4vw,28px);font-weight:600;color:var(--faint);font-variant-numeric:lining-nums}
+.sec-head p{grid-column:2;color:var(--muted);font-size:16.5px;max-width:68ch}
+.sec-head.no-num{grid-template-columns:minmax(0,1fr)}
+.sec-head.no-num p{grid-column:1}
+
+.main{display:grid;grid-template-columns:minmax(0,470px) minmax(0,1fr);gap:20px;align-items:start}
+@media (max-width:900px){.main{grid-template-columns:minmax(0,1fr)}}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);min-width:0}
+.code{position:sticky;top:max(12px,env(safe-area-inset-top,0px));overflow:hidden;background:var(--surface)}
+@media (max-width:900px){.code{position:static}}
+.code-head{display:flex;justify-content:space-between;gap:8px;align-items:baseline;padding:12px 16px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.code-head .mono{color:var(--muted);font-size:12px}
+.src{margin:0;padding:8px 0;overflow-x:auto;font-family:var(--f-mono);font-size:12px;line-height:1.75}
+.ln{display:grid;grid-template-columns:44px 1fr;white-space:pre;border-left:3px solid transparent;cursor:pointer}
+.ln:hover{background:var(--sunk)}
+.ln .n{color:var(--faint);text-align:right;padding-right:12px;user-select:none}
+.ln.cm .t{color:var(--faint)}
+.ln.on{background:var(--hl);border-left-color:var(--hl-edge)}
+.ln.gap .t{color:var(--faint);font-style:italic}
+.code-foot{padding:10px 16px;border-top:1px solid var(--line);font-size:13px;color:var(--muted)}
+
+.bench{display:flex;flex-direction:column}
+.ctrl{display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:12px 16px;border-bottom:1px solid var(--line);background:var(--sunk);border-radius:var(--r) var(--r) 0 0}
+.btns{display:flex;gap:6px;flex-wrap:wrap}
+button{font:inherit;font-size:14px;font-weight:500;color:var(--fg);background:var(--surface);border:1px solid var(--line-strong);border-radius:5px;padding:6px 12px;cursor:pointer;line-height:1.3}
+button:hover{border-color:var(--muted)}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,a:focus-visible{outline:2px solid var(--center);outline-offset:2px}
+button.primary{background:var(--center);border-color:var(--center);color:var(--surface)}
+button.primary:hover{filter:brightness(1.08)}
+.pos{display:flex;gap:10px;align-items:center;flex:1 1 260px;min-width:0}
+.pos select{font:inherit;font-size:14px;background:var(--surface);color:var(--fg);border:1px solid var(--line-strong);border-radius:5px;padding:4px 6px}
+.pos input[type=range]{flex:1;min-width:80px;accent-color:var(--center)}
+.pos .mono{font-size:12px;color:var(--muted);white-space:nowrap}
+.phases{display:flex;gap:4px;padding:10px 16px;border-bottom:1px solid var(--line);overflow-x:auto;scrollbar-width:thin}
+.ph{font-size:13px;padding:3px 10px;border-radius:999px;border:1px solid var(--line);background:transparent;white-space:nowrap;color:var(--muted)}
+.ph.done{color:var(--fg);border-color:var(--line-strong)}
+.ph.on{background:var(--fg);color:var(--surface);border-color:var(--fg)}
+.stage{padding:20px 20px 24px;display:flex;flex-direction:column;gap:18px;min-height:520px}
+.pairline{display:flex;flex-wrap:wrap;gap:6px 18px;align-items:baseline;font-size:14px}
+.pairline .big{font-family:var(--f-display);font-size:28px;font-weight:600}
+div.explain{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0;border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+@media (max-width:640px){div.explain{grid-template-columns:minmax(0,1fr)}}
+div.explain p{padding:12px 14px;font-size:15px;line-height:1.55}
+div.explain p+p{border-left:1px solid var(--line);background:var(--sunk)}
+@media (max-width:640px){div.explain p+p{border-left:0;border-top:1px solid var(--line)}}
+div.explain p>b:first-child{display:block;font-size:13px;color:var(--muted);font-weight:600;margin-bottom:3px}
+.math{font-family:var(--f-mono);font-size:13px;background:var(--sunk);border-radius:var(--r);padding:10px 12px;overflow-x:auto;white-space:pre;line-height:1.7}
+.viz{overflow-x:auto;min-width:0}
+.viz svg{display:block}
+.row2{display:flex;flex-wrap:wrap;gap:18px;align-items:flex-start}
+.row2>*{min-width:0}
+.note{font-size:14px;color:var(--muted)}
+.shape{font-family:var(--f-mono);font-size:11.5px;color:var(--faint);font-weight:400}
+
+.grid-head{display:flex;justify-content:space-between;align-items:baseline;gap:6px 12px;flex-wrap:wrap}
+.run{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:20px}
+.run .panel{padding:18px 20px;display:flex;flex-direction:column;gap:12px}
+.legend{display:flex;flex-wrap:wrap;gap:14px;font-size:13px;color:var(--muted)}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:-1px}
+.takeaways{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:0;border-top:2px solid var(--fg)}
+.takeaways .panel{background:transparent;border:0;border-radius:0;padding:18px 22px 6px 0;display:flex;flex-direction:column;gap:8px}
+.takeaways .panel+.panel{padding-left:22px;border-left:1px solid var(--line)}
+@media (max-width:700px){.takeaways .panel+.panel{padding-left:0;border-left:0;border-top:1px solid var(--line)}}
+.takeaways p{font-size:15.5px;color:var(--muted)}
+.takeaways h2{font-size:20px}
+svg text{fill:var(--muted);font-family:var(--f-mono);font-size:10px}
+svg .lbl{fill:var(--fg)}
+svg .axis{stroke:var(--line)}
+.foot{border-top:1px solid var(--line);padding-top:20px;display:flex;flex-wrap:wrap;justify-content:space-between;gap:10px 24px;font-size:14px;color:var(--muted)}
+.foot p{max-width:70ch}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+.params{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.pchip{display:inline-flex;align-items:center;gap:6px;font-family:var(--f-mono);font-size:12.5px;padding:2px 4px 2px 9px;border:1px solid var(--line);border-radius:4px;background:var(--surface)}
+.pchip input{font-family:var(--f-mono);font-size:12.5px;font-weight:600;color:var(--center);background:var(--sunk);border:1px solid var(--line);border-radius:3px;padding:2px 4px;width:4.6em}
+.pchip.changed{border-color:var(--target)}
+.pchip.changed input{color:var(--target)}
+.pchip.pending{border-color:var(--center);border-style:dashed}
+.pchip.pending input{color:var(--fg)}
+.chip.derived{color:var(--muted)}
+.corpus{display:grid;grid-template-columns:minmax(0,1fr) minmax(260px,340px);gap:14px;align-items:start}
+@media (max-width:760px){.corpus{grid-template-columns:1fr}}
+.cbox{display:flex;flex-direction:column;gap:6px;min-width:0}
+.cbox label{font-size:13px;color:var(--muted)}
+.cbox label b{color:var(--fg);font-weight:600}
+#tCorpus{width:100%;box-sizing:border-box;min-height:180px;resize:vertical;font-family:var(--f-mono);font-size:13px;line-height:1.45;color:var(--fg);background:var(--sunk);border:1px solid var(--line);border-radius:6px;padding:8px 10px}
+#tCorpus.pending{border-color:var(--center);border-style:dashed}
+#tCorpus.changed{border-color:var(--target)}
+.cinfo{font-size:12.5px;color:var(--muted);font-family:var(--f-mono)}
+.cinfo.err{color:var(--target);font-family:inherit}
+.presets{display:flex;flex-direction:column;gap:6px;min-width:0}
+.presets h3{margin:0}
+.pnav{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.pbtns{display:flex;align-items:center;gap:6px}
+.pbtns button{padding:2px 10px}
+#pUse{align-self:flex-start}
+#pUse:disabled{opacity:.55;cursor:default}
+.preset{display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--fg);min-height:150px}
+.preset.on{border-color:var(--center)}
+.preset b{font-size:13.5px;font-weight:600}
+.preset span{font-size:12.5px;color:var(--muted);line-height:1.4}
+.preset code{font-size:11.5px}
+.runnote{font-size:13px;color:var(--muted);max-width:80ch}
+.runnote b{color:var(--target);font-weight:600}
+.ln .t .hv{color:var(--center);font-weight:600}
+.code{display:flex;flex-direction:column}
+.code .src{flex:1 1 auto;min-height:0;overflow:auto;font-variant-ligatures:none;scrollbar-width:thin;scrollbar-color:color-mix(in oklab,var(--muted) 55%,transparent) transparent}
+.code .src::-webkit-scrollbar{width:6px;height:6px}
+.code .src::-webkit-scrollbar-thumb{background:color-mix(in oklab,var(--muted) 55%,transparent);border-radius:3px}
+.code .src::-webkit-scrollbar-track{background:transparent}
+@media (min-width:901px){.code{height:var(--bench-h,auto)}}
+.ln .t .hv.changed{color:var(--target)}
+.worked{padding:20px 22px 24px;display:flex;flex-direction:column;gap:16px}
+.wk-head{display:flex;flex-wrap:wrap;gap:6px 16px;align-items:baseline}
+.wk-head h2{font-size:22px}
+.wk-head .note{font-family:var(--f-mono);font-size:12px}
+.scroll{overflow-x:auto;min-width:0;border:1px solid var(--line);border-radius:6px}
+.wt{border-collapse:collapse;font-family:var(--f-mono);font-size:11.5px;font-variant-numeric:tabular-nums;width:max-content}
+.wt th,.wt td{padding:4px 7px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
+.wt thead th{color:var(--muted);font-weight:500;background:var(--sunk);position:sticky;top:0}
+.wt th.rl{text-align:left;color:var(--muted);font-weight:500;position:sticky;left:0;background:var(--surface);border-right:1px solid var(--line)}
+.wt thead th.rl{background:var(--sunk)}
+.wt .ctx{background:color-mix(in oklab,var(--target) 14%,var(--surface))}
+.wt thead th.ctx{background:color-mix(in oklab,var(--target) 22%,var(--sunk));color:var(--target);font-weight:600}
+.wt td.key{font-weight:700;color:var(--fg);box-shadow:inset 0 0 0 2px var(--target)}
+.wt td.best{box-shadow:inset 0 0 0 2px var(--center)}
+.wt td.best.key{box-shadow:inset 0 0 0 2px var(--target)}
+.wt tr.res td,.wt tr.res th{border-top:2px solid var(--fg);font-weight:600;color:var(--fg)}
+.wt tr.prod td{color:var(--muted)}
+.wt tr.hdr td{color:var(--muted);font-style:italic}
+.wt tr.dim td{color:var(--faint)}
+.wt tr.cenrow td{background:color-mix(in oklab,var(--center) 14%,var(--surface));color:var(--fg)}
+.wt tr.cenrow th.rl{color:var(--center);font-weight:600}
+.wt .op{color:var(--muted);text-align:center;font-size:14px;padding:0 4px}
+.callouts{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px;max-width:90ch;font-size:14px}
+.callouts li::marker{color:var(--target)}
+.math b{color:var(--target)}
+.wlegend{display:flex;flex-wrap:wrap;gap:14px;font-size:12px;color:var(--muted)}
+.wlegend span{display:inline-flex;align-items:center;gap:6px}
+.sw{display:inline-block;width:14px;height:12px;border-radius:2px}
+.eq{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center}
+.eqblk{display:flex;flex-direction:column;gap:6px;min-width:0;max-width:100%}
+.eqblk>.scroll,.worked>#worked>.scroll{align-self:flex-start;max-width:100%}
+.eqcap{font-size:12.5px;color:var(--muted);font-family:var(--f-mono)}
+.eqop{font-family:var(--f-mono);font-size:26px;font-weight:600;color:var(--muted);padding:0 4px;align-self:center}
+.wt td.hcell{background:color-mix(in oklab,var(--center) 14%,var(--surface));color:var(--center);font-weight:600}
+.worked h3{margin-top:4px}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,350px),1fr));gap:12px}
+.card{display:flex;flex-direction:column;gap:6px;min-width:0}
+.card .wt{width:100%}
+.card .wt .op,.card .wt th.rl{width:1%}
+.card .scroll{align-self:stretch}
+.card.cardctx .eqcap{color:var(--target);font-weight:600}
+.card.cardbest .eqcap{color:var(--center);font-weight:600}
+.card.cardbest .scroll{border:2px solid var(--center)}
+.wt tr.ctxrow td,.wt tr.ctxrow th{background:color-mix(in oklab,var(--target) 14%,var(--surface))}
+.wt tr.ctxrow th.rl{color:var(--target);font-weight:600}
+.pred .wt{width:100%}
+.pred .wt td,.pred .wt th{text-align:left;white-space:normal}
+.pred .wt td.num{text-align:right;white-space:nowrap}
+.pchip{display:inline-block}
+.pw{display:inline-block;margin:1px 4px 1px 0;padding:1px 6px;border-radius:3px;border:1px solid var(--line);white-space:nowrap}
+.pw.ok{border-color:var(--g-pets);color:var(--g-pets)}
+.pw.no{color:var(--muted)}
+.pbar{display:inline-block;height:8px;border-radius:2px;background:var(--g-pets);vertical-align:middle;margin-right:6px}
+.pairgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:2px 12px;font-family:var(--f-mono);font-size:12px}
+.pairgrid i{color:var(--faint);font-style:normal;display:inline-block;width:2.6em;text-align:right;margin-right:6px}
+.pairgrid .first{color:var(--target);font-weight:600}
+/* typeset formulas (MathJax SVG follows currentColor) */
+.formula{overflow-x:auto;padding:4px 2px;color:var(--fg);font-size:1.08em}
+.deriv{margin:0;padding-left:24px;display:flex;flex-direction:column;gap:10px;max-width:100%}
+.deriv>li{padding-left:4px}
+.deriv>li::marker{color:var(--target);font-weight:600}
+.deriv>li>p{margin:0 0 2px;font-size:14px;max-width:90ch}
+.gloss{display:grid;grid-template-columns:auto 1fr auto 1fr;font-size:14px;width:100%;border:1px solid var(--border,rgba(127,127,127,.25));border-radius:6px}
+.gloss>.gcap{grid-column:1/-1;font-weight:600;padding:6px 10px;font-size:13px}
+.gloss>.gs,.gloss>.gm{padding:6px 10px;border-top:1px solid var(--border,rgba(127,127,127,.25));display:flex;align-items:center}
+.gloss>.gs{justify-content:center;min-width:70px;white-space:nowrap}
+.gloss>.gs:nth-child(4n){border-left:1px solid var(--border,rgba(127,127,127,.25))}
+@media (max-width:760px){.gloss{grid-template-columns:auto 1fr}.gloss>.gs:nth-child(4n){border-left:0}}
+.callouts mjx-container{color:var(--fg)}
+.nav a.home{color:var(--fg);font-weight:600;padding-right:14px;border-right:1px solid var(--line)}
+.settings{display:flex;flex-direction:column;gap:10px}
+.phelp{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,230px),1fr));gap:6px 20px;margin:0;font-size:14px}
+.phelp>div{display:flex;flex-direction:column;gap:1px}
+.phelp dt{font-family:var(--f-mono);font-size:12.5px;font-weight:600;white-space:nowrap}
+.phelp dd{margin:0;color:var(--muted)}
+.kbd{font-family:var(--f-mono);font-size:12px;border:1px solid var(--line-strong);border-bottom-width:2px;border-radius:4px;padding:0 5px;background:var(--surface);color:var(--fg);white-space:nowrap}
+</style>
+<script>
+window.MathJax={tex:{inlineMath:[['\\(','\\)']],displayMath:[['\\[','\\]']]},svg:{fontCache:'global'},
+  startup:{typeset:false,pageReady(){return MathJax.startup.defaultPageReady().then(()=>typesetMath())}}};
+function typesetMath(ids=['worked','takeaways','pcaSec','intro']){const els=ids.map(id=>document.getElementById(id)).filter(Boolean);
+  if(window.MathJax&&MathJax.typesetPromise){try{MathJax.typesetClear&&MathJax.typesetClear(els)}catch(e){}return MathJax.typesetPromise(els).catch(()=>{})}}
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg.js" async></script>
+
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <a class="brand" href="#top" id="top"><svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true"><rect x="1" y="9" width="7" height="8" rx="1.5" fill="none" stroke="var(--target)" stroke-width="2"/><rect x="10" y="9" width="7" height="8" rx="1.5" fill="var(--center)"/><rect x="19" y="9" width="6" height="8" rx="1.5" fill="none" stroke="var(--target)" stroke-width="2"/></svg>Negative sampling, step by step</a>
+    <nav class="nav" aria-label="Sections">
+      <a href="../" class="home">← All chapters</a><a href="#s-idea">Key terms</a><a href="#s-setup">Sentences</a><a href="#s-step">Training loop</a><a href="#s-math">Math</a><a href="#s-run">Whole run</a>
+      <button class="theme-btn" id="bTheme" type="button" aria-label="Switch light or dark theme">Dark</button>
+    </nav>
+  </div>
+
+  <header class="hero">
+    <div class="hero-text">
+      <span class="kicker">Chapter 02 · skip-gram with negative sampling</span>
+      <h1>Learning word embeddings without scoring every word</h1>
+      <p class="lede">In chapter 01 the model scored all the words in the vocabulary on every step, then used softmax to pick out the right neighbour. That works for 21 words but not for 100,000. Negative sampling swaps that one big question for a few small yes/no questions: "is this word really a neighbour?" for the real neighbour, and for a handful of randomly drawn words that aren't. Here we train it in the browser and look at every step, with every number worked out.</p>
+      <ol class="howto">
+        <li><span class="n">1</span><div><b>Pick some sentences</b><p>We start from a ready-made set, or type our own.</p></div></li>
+        <li><span class="n">2</span><div><b>Step through the loop</b><p>Press <b>Line ▶</b> or the → key. The running line of code lights up.</p></div></li>
+        <li><span class="n">3</span><div><b>Read the math</b><p>Every formula is shown with this step's real numbers.</p></div></li>
+      </ol>
+    </div>
+    <figure class="figure" style="margin:0">
+      <svg viewBox="0 0 520 250" role="img" aria-label="The center word furry is checked against its real neighbour pets, which should get a yes, and against three randomly drawn words, apples, cars and fast, which should each get a no.">
+        <rect x="194" y="14" width="132" height="44" rx="6" fill="color-mix(in oklab,var(--center) 14%,var(--surface))" stroke="var(--center)" stroke-width="2"/>
+        <text x="260" y="43" text-anchor="middle" class="fig-word" style="fill:var(--center)">furry</text>
+        <text x="260" y="76" text-anchor="middle" style="font-family:var(--f-body);font-size:13px;fill:var(--center);font-weight:600">center word</text>
+        <g stroke="var(--muted)" stroke-width="1.5" fill="none"><path d="M250 84 L72 140"/><path d="M256 84 L196 140"/><path d="M264 84 L320 140"/><path d="M270 84 L444 140"/></g>
+        <rect x="16" y="142" width="112" height="40" rx="6" fill="none" stroke="var(--target)" stroke-width="2"/>
+        <rect x="140" y="142" width="112" height="40" rx="6" fill="var(--sunk)" stroke="var(--line)"/>
+        <rect x="264" y="142" width="112" height="40" rx="6" fill="var(--sunk)" stroke="var(--line)"/>
+        <rect x="388" y="142" width="112" height="40" rx="6" fill="var(--sunk)" stroke="var(--line)"/>
+        <text x="72" y="168" text-anchor="middle" class="fig-word" style="font-size:19px;fill:var(--target)">pets</text>
+        <text x="196" y="168" text-anchor="middle" class="fig-word" style="font-size:19px;fill:var(--muted)">apples</text>
+        <text x="320" y="168" text-anchor="middle" class="fig-word" style="font-size:19px;fill:var(--muted)">cars</text>
+        <text x="444" y="168" text-anchor="middle" class="fig-word" style="font-size:19px;fill:var(--muted)">fast</text>
+        <text x="72" y="204" text-anchor="middle" style="font-family:var(--f-body);font-size:13px;fill:var(--target);font-weight:600">real neighbour</text>
+        <text x="72" y="222" text-anchor="middle" style="font-family:var(--f-body);font-size:13px;fill:var(--fg)">answer: yes ↑</text>
+        <text x="320" y="204" text-anchor="middle" style="font-family:var(--f-body);font-size:13px;fill:var(--muted)">K = 3 randomly drawn words</text>
+        <text x="320" y="222" text-anchor="middle" style="font-family:var(--f-body);font-size:13px;fill:var(--fg)">answer: no ↓</text>
+        
+      </svg>
+      <figcaption>For each real pair the model answers 1 + K yes/no questions, each from a single dot product and a sigmoid. With K = 3 that's 4 scores per step instead of one for every word in the vocabulary.</figcaption>
+    </figure>
+  </header>
+
+  <section class="sec" id="s-idea">
+    <div class="sec-head no-num"><h2>The moving parts</h2><p>E, h, pairs and the learning rate work exactly as in chapter 01. These are the parts that are new or different.</p></div>
+    <dl class="parts" id="intro">
+      <div><dt>W <span class="shape">(words × D)</span></dt><dd>Still one vector per word, but now stored as rows, the same shape as E. W[word] is that word's vector.</dd></div>
+      <div><dt>u</dt><dd>The row of W for the word being checked: the real neighbour, or one of the wrong words.</dd></div>
+      <div><dt>score = h · u</dt><dd>One number for one pair of words. Big means "probably neighbours".</dd></div>
+      <div><dt>σ (sigmoid)</dt><dd>Turns a score into a chance between 0 and 1. σ(0) = 0.5, so a score of 0 means 50/50.</dd></div>
+      <div><dt>wrong word</dt><dd>A randomly drawn word, also called a negative sample. The model should answer "no" for it.</dd></div>
+      <div><dt>K</dt><dd>How many wrong words are drawn for every real pair.</dd></div>
+      <div><dt>P(w) ∝ count<sup>0.75</sup></dt><dd>How likely each word is to be drawn as a wrong word: frequent words more often.</dd></div>
+      <div><dt>loss</dt><dd>−ln(chance of yes) for the real word, plus −ln(chance of no) for each wrong word.</dd></div>
+    </dl>
+  </section>
+
+  <section class="sec" id="s-setup">
+    <div class="sec-head"><span class="sec-num">1</span><h2>Choose the sentences</h2><p>The model only knows the words in these sentences. Short, repetitive sentences make the pattern easy to see.</p></div>
+    <div class="corpus">
+      <div class="cbox">
+        <label for="tCorpus"><b>Sentences</b>, one per line. Words are split on spaces and lowercased, so <code>Cat</code> and <code>cat</code> count as the same word. They become <code>corpus</code> on line 1 of the code.</label>
+        <textarea id="tCorpus" spellcheck="false" autocomplete="off"></textarea>
+        <div class="cinfo" id="corpusInfo"></div>
+      </div>
+      <div class="presets">
+        <div class="pnav"><h3>Ready-made sets</h3>
+          <div class="pbtns"><button id="pPrev" title="Previous set" aria-label="Previous set">◀</button><span class="mono" id="pPos">1 / 5</span><button id="pNext" title="Next set" aria-label="Next set">▶</button></div></div>
+        <div id="presetList"></div>
+        <button id="pUse" class="primary">Use this set</button>
+        <p class="note" style="margin:0">This fills in the sentences and the settings below, and trains on them.</p></div>
+    </div>
+    <div class="settings">
+      <h3>Settings</h3>
+      <div class="params" id="params">
+        <label class="pchip" data-k="WINDOW">WINDOW = <input id="pWINDOW" type="number" min="1" max="3" step="1" value="1"></label>
+        <label class="pchip" data-k="D">D = <input id="pD" type="number" min="2" max="64" step="1" value="3"></label>
+        <label class="pchip" data-k="LR">LEARNING_RATE = <input id="pLR" type="number" min="0.001" max="5" step="0.01" value="0.05"></label>
+        <label class="pchip" data-k="EPOCHS">EPOCHS = <input id="pEPOCHS" type="number" min="1" max="100" step="1" value="50"></label>
+        <label class="pchip" data-k="K">K = <input id="pK" type="number" min="1" max="10" step="1" value="3"></label>
+        <span class="chip derived">vocab_length = <b id="dVocab">21</b></span>
+        <span class="chip derived">len(pairs) = <b id="dPairs">108</b></span>
+        <span class="chip derived">updates = <b id="dUpd">5400</b></span>
+        <button id="bApply" class="primary" hidden>Run with these values</button>
+        <button id="bReset" hidden>Reset to the default sentences and values</button>
+      </div>
+      <dl class="phelp">
+        <div><dt>WINDOW</dt><dd>How many words on each side count as a neighbour.</dd></div>
+        <div><dt>D</dt><dd>How many numbers describe each word.</dd></div>
+        <div><dt>LEARNING_RATE</dt><dd>How big each correction is. Too big and training jumps around.</dd></div>
+        <div><dt>EPOCHS</dt><dd>How many times the model goes through every pair.</dd></div>
+        <div><dt>K</dt><dd>How many wrong words are drawn for each real pair.</dd></div>
+      </dl>
+      <p class="runnote" id="runnote"></p>
+    </div>
+  </section>
+
+  <section class="sec" id="s-step">
+    <div class="sec-head"><span class="sec-num">2</span><h2>Step through the training loop</h2><p>The left side is the whole program. The right side shows what the highlighted line does to the numbers. Use the buttons or the keyboard: <span class="kbd">→</span> next line, <span class="kbd">←</span> back, <span class="kbd">Shift</span>+<span class="kbd">→</span> next pair, <span class="kbd">Space</span> play.</p></div>
+    <div class="main">
+      <div class="panel code">
+        <div class="code-head"><h3>The code</h3><span class="mono">Python + NumPy</span></div>
+        <pre class="src" id="src"></pre>
+        <div class="code-foot">Plain Python and NumPy, nothing else. Click a highlighted line to jump to it.</div>
+      </div>
+
+      <div class="panel bench">
+        <div class="ctrl">
+          <div class="btns">
+            <button id="bPrev" title="Previous line (←)">◀ Line</button>
+            <button id="bNext" class="primary" title="Next line (→)">Line ▶</button>
+            <button id="bPair" title="Skip to next pair (Shift+→)">Next pair ⏭</button>
+            <button id="bPlay" title="Play (Space)">Play</button>
+            <button id="bRestart" title="Go back to epoch 1, pair 1">Restart</button>
+          </div>
+          <div class="pos">
+            <label for="selEpoch" class="mono">epoch</label>
+            <select id="selEpoch"></select>
+            <label for="rngStep" class="mono">pair</label>
+            <input type="range" id="rngStep" min="0" max="107" value="0">
+            <span class="mono" id="posTxt">1 / 108</span>
+          </div>
+        </div>
+        <div class="phases" id="phases"></div>
+        <div class="stage" id="stage"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec" id="s-math">
+    <div class="sec-head"><span class="sec-num">3</span><h2>The math behind the highlighted line</h2><p>The formula first, then where it comes from, then the same formula with this step's real numbers. Nothing is rounded away: every table shows every word.</p></div>
+    <div class="panel worked" aria-live="polite">
+      <div class="wlegend"><span><i class="sw" style="background:color-mix(in oklab,var(--target) 22%,var(--surface))"></i>the real context word</span><span><i class="sw" style="box-shadow:inset 0 0 0 2px var(--target)"></i>the number that matters</span></div>
+      <div id="worked" style="display:flex;flex-direction:column;gap:14px;min-width:0"></div>
+    </div>
+  </section>
+
+  <section class="sec" id="s-run">
+    <div class="sec-head"><span class="sec-num">4</span><h2>Across the whole run</h2><p>One step barely changes anything. These charts show what thousands of small steps add up to. They follow the position we picked above.</p></div>
+    <div class="run">
+      <div class="panel">
+        <div class="grid-head"><h3>Loss</h3>
+          <label class="note" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="chk50"> <span id="chk50lbl">show what more epochs would do</span></label></div>
+        <p class="note">Lower is better. Each grey dot is one pair (its 1 + K loss terms added up); the blue line is the average for each epoch.</p>
+        <div class="viz" id="lossViz"></div>
+        <div class="legend"><span><i style="background:var(--faint)"></i>loss of each pair</span><span><i style="background:var(--center)"></i>epoch average</span><span><i style="background:var(--target)"></i>current pair</span></div>
+      </div>
+      <div class="panel">
+        <div class="grid-head"><h3>Embedding space</h3><span class="note" id="pcaNote"></span></div>
+        <p class="note">Each dot is a word. Words that the model thinks are alike sit close together. The 2-D view is made with PCA (lines 66–78), worked out step by step in chapter 01.</p>
+        <div class="viz" id="pcaViz"></div>
+        <div class="legend" id="pcaLegend"></div>
+      </div>
+      <div class="panel pred" style="grid-column:1/-1">
+        <div class="grid-head"><h3>What the model predicts</h3><span class="note" id="predNote"></span></div>
+        <p class="note" style="margin:0">For each word, the model answers "is word j a neighbour?" for every word j, using the weights at the current position: σ(E[word] · W[j]). These are separate yes/no answers, so they don't add up to 100%. A <span style="color:var(--g-pets)">green</span> pick really appears next to that word. A good model says yes to real neighbours and no to the rest.</p>
+        <div class="scroll" id="predViz"></div>
+      </div>
+    </div>
+  </section>
+
+
+  <section class="sec" id="s-takeaways">
+    <div class="sec-head no-num"><h2>What to take away</h2></div>
+    <div class="takeaways" id="takeaways"></div>
+  </section>
+
+  <footer class="foot">
+    <p>Everything runs in the browser. The random numbers copy NumPy's <code>np.random.seed(42)</code> exactly, so the losses match the Python code line for line.</p>
+    <p><a href="#top">Back to top</a></p>
+  </footer>
+</div>
+
+<script>
+// ---- numpy legacy RandomState (MT19937 + legacy gauss + legacy shuffle), so runs match np.random.seed(42) ----
+class NpRandom{
+  constructor(seed){this.mt=new Uint32Array(624);this.mt[0]=seed>>>0;for(let i=1;i<624;i++){const p=this.mt[i-1]^(this.mt[i-1]>>>30);this.mt[i]=(Math.imul(1812433253,p)+i)>>>0}this.i=624;this.hasG=false}
+  gen(){const m=this.mt;for(let k=0;k<624;k++){const y=(m[k]&0x80000000)|(m[(k+1)%624]&0x7fffffff);let v=m[(k+397)%624]^(y>>>1);if(y&1)v^=0x9908b0df;m[k]=v>>>0}this.i=0}
+  u32(){if(this.i>=624)this.gen();let y=this.mt[this.i++];y^=y>>>11;y^=(y<<7)&0x9d2c5680;y^=(y<<15)&0xefc60000;y^=y>>>18;return y>>>0}
+  dbl(){const a=this.u32()>>>5,b=this.u32()>>>6;return(a*67108864+b)/9007199254740992}
+  randn(){if(this.hasG){this.hasG=false;return this.g}let x1,x2,r2;do{x1=2*this.dbl()-1;x2=2*this.dbl()-1;r2=x1*x1+x2*x2}while(r2>=1||r2===0);const f=Math.sqrt(-2*Math.log(r2)/r2);this.g=f*x1;this.hasG=true;return f*x2}
+  interval(max){if(max===0)return 0;let m=max;m|=m>>>1;m|=m>>>2;m|=m>>>4;m|=m>>>8;m|=m>>>16;let v;while((v=(this.u32()&m)>>>0)>max);return v}
+  shuffle(a){for(let i=a.length-1;i>0;i--){const j=this.interval(i);const t=a[i];a[i]=a[j];a[j]=t}}
+}
+const DEFAULT_CORPUS=["cats furry pets","cats playful pets","cats gentle pets","dogs furry pets","dogs playful pets","dogs gentle pets","rabbits furry pets","rabbits playful pets","rabbits gentle pets","apples sweet fruit","apples juicy fruit","apples fresh fruit","bananas sweet fruit","bananas juicy fruit","bananas fresh fruit","oranges sweet fruit","oranges juicy fruit","oranges fresh fruit","cars fast vehicles","cars motorized vehicles","cars wheeled vehicles","buses fast vehicles","buses motorized vehicles","buses wheeled vehicles","trucks fast vehicles","trucks motorized vehicles","trucks wheeled vehicles"];
+// the corpus is swappable from the page; train() sets these globals for whichever sentences it runs on
+let SENTS=[], V=[], NV=0, W2I={};
+function setCorpus(lines){SENTS=lines.map(s=>s.split(/\s+/).filter(Boolean).map(w=>w.toLowerCase()));V=[...new Set(SENTS.flat())].sort();NV=V.length;W2I=Object.fromEntries(V.map((w,i)=>[w,i]))}
+setCorpus(DEFAULT_CORPUS);
+// numpy legacy choice(V, p=probs) with size=None: one random_sample, then searchsorted(cdf, u, side='right')
+function npChoice(rng,cdf){const u=rng.dbl();let lo=0,hi=cdf.length;while(lo<hi){const m=(lo+hi)>>1;if(cdf[m]<=u)lo=m+1;else hi=m}return [lo,u]}
+const sigmoid=x=>{x=Math.min(15,Math.max(-15,x));return 1/(1+Math.exp(-x))};
+const logaddexp0=t=>t>0?t+Math.log1p(Math.exp(-t)):Math.log1p(Math.exp(t)); // log(1 + e^t)
+const dot=(a,b)=>{let s=0;for(let i=0;i<a.length;i++)s+=a[i]*b[i];return s};
+// sampling table: count^0.75, normalized, plus its running total (cdf)
+function negTable(){
+  const counts=new Array(NV).fill(0);for(const s of SENTS)for(const w of s)counts[W2I[w]]++;
+  const pw=counts.map(c=>Math.pow(c,0.75));const tot=pw.reduce((a,b)=>a+b,0);const P=pw.map(v=>v/tot);
+  const cdf=[];let acc=0;for(const v of P){acc+=v;cdf.push(acc)}const last=cdf[cdf.length-1];
+  return {counts,pw,tot,P,cdf:cdf.map(v=>v/last)};
+}
+// one positive update followed by one update per negative word, mutating E and W like the training loop
+function nsStep(E,W,c,x,negs,LR){
+  const h=E[c].slice(),u=W[x].slice(),score=dot(h,u);
+  const loss=logaddexp0(-score),sg=sigmoid(score),err=sg-1;
+  const gh=h.map((_,i)=>err*u[i]),gu=h.map(v=>err*v);
+  for(let i=0;i<h.length;i++){E[c][i]-=LR*gh[i];W[x][i]-=LR*gu[i]}
+  const pos={h,u,score,sg,loss,err,gh,gu,hA:E[c].slice(),uA:W[x].slice()};
+  const neg=[];let total=loss;
+  for(const n of negs){
+    const hn=E[c].slice(),un=W[n].slice(),s=dot(hn,un);
+    const l=logaddexp0(s),e=sigmoid(s);
+    const g1=un.map(v=>e*v),g2=hn.map(v=>e*v);
+    for(let i=0;i<hn.length;i++){E[c][i]-=LR*g1[i];W[n][i]-=LR*g2[i]}
+    neg.push({n,h:hn,u:un,score:s,sg:e,loss:l,err:e,gh:g1,gu:g2,hA:E[c].slice(),uA:W[n].slice()});total+=l;
+  }
+  return {pos,neg,loss:total};
+}
+const CK=32;
+function train(cfg){
+  const {WINDOW,D,LR,EPOCHS,K}=cfg, LE=Math.max(EPOCHS,50);
+  setCorpus(cfg.CORPUS||DEFAULT_CORPUS);
+  const pairs=[];
+  for(const s of SENTS){const n=s.length;for(let i=0;i<n;i++){const l=Math.max(0,i-WINDOW),r=Math.min(n,i+WINDOW+1);for(let j=l;j<r;j++)if(j!==i)pairs.push([W2I[s[i]],W2I[s[j]]])}}
+  const rng=new NpRandom(42);
+  const E=[];for(let i=0;i<NV;i++){const r=[];for(let j=0;j<D;j++)r.push(rng.randn()*0.1);E.push(r)}
+  const W=[];for(let i=0;i<NV;i++){const r=[];for(let j=0;j<D;j++)r.push(rng.randn()*0.1);W.push(r)} // (V, D): one row per word
+  const E0=E.map(r=>r.slice()),W0=W.map(r=>r.slice());
+  const NT=negTable();
+  const NP=pairs.length, order=[], steps=[], ck=[], losses=[];
+  let finalE=null,finalW=null;
+  for(let ep=0;ep<LE;ep++){
+    rng.shuffle(pairs);let total=0;const detail=ep<EPOCHS;
+    if(detail)order.push(pairs.map(p=>p.slice()));
+    for(let k=0;k<NP;k++){const [c,x]=pairs[k];const g=ep*NP+k;
+      if(detail&&g%CK===0)ck.push({E:E.map(r=>r.slice()),W:W.map(r=>r.slice())});
+      // sample_negatives runs after the positive update, but only uses the random stream, so drawing first is equivalent
+      const negs=[],draws=[];while(negs.length<K){const [w,u]=npChoice(rng,NT.cdf);draws.push({w,u});if(w!==x)negs.push(w)}
+      const r=nsStep(E,W,c,x,negs,LR);total+=r.loss;
+      if(detail)steps.push({ep,k,c,x,negs,draws,loss:r.loss,total});}
+    losses.push(total/NP);
+    if(ep===EPOCHS-1){finalE=E.map(r=>r.slice());finalW=W.map(r=>r.slice())}
+  }
+  return {cfg,NP,order,steps,ck,losses,finalE,finalW,E0,W0,NT};
+}
+// full detail for update g: state before, intermediates, state after
+function stateAt(run,g){
+  const b=run.ck[Math.floor(g/CK)];const E=b.E.map(r=>r.slice()),W=b.W.map(r=>r.slice());
+  for(let t=Math.floor(g/CK)*CK;t<g;t++){const s=run.steps[t];nsStep(E,W,s.c,s.x,s.negs,run.cfg.LR)}
+  const Eb=E.map(r=>r.slice()),Wb=W.map(r=>r.slice()),s=run.steps[g];
+  const r=nsStep(E,W,s.c,s.x,s.negs,run.cfg.LR);
+  return {...s,...r,runBefore:s.total-r.loss,Eb,Wb,Ea:E,Wa:W};
+}
+
+const FILE={WINDOW:1,D:3,LR:0.05,EPOCHS:50,K:3,CORPUS:DEFAULT_CORPUS};
+// ready-made sentence sets; loss numbers were measured with this engine (seed 42)
+const DEF_GROUPS={cats:"pets",dogs:"pets",rabbits:"pets",pets:"pets",apples:"fruit",bananas:"fruit",oranges:"fruit",fruit:"fruit",cars:"veh",buses:"veh",trucks:"veh",vehicles:"veh"};
+const DEF_LEGEND={pets:"pets",fruit:"fruit",veh:"vehicles",adj:"describing words"};
+const PRESETS=[
+ {id:"file",name:"Pets, fruit and vehicles (default)",note:"27 three-word sentences, 21 words, 108 pairs. Loss 2.77 → 1.21 in 50 epochs; cats, dogs and rabbits end up together.",text:DEFAULT_CORPUS,cfg:{WINDOW:1,D:3,LR:0.05,EPOCHS:50,K:3}},
+ {id:"meow",name:"Smallest: who meows, who barks",note:"4 sentences, 6 words, 8 pairs. Loss 2.76 → 1.24 in 20 epochs (160 updates). kitten and cat end up together because both sit next to meows.",
+  text:["kitten meows","cat meows","puppy barks","dog barks"],cfg:{WINDOW:1,D:3,LR:0.3,EPOCHS:20,K:3},
+  groups:{kitten:"pets",cat:"pets",puppy:"veh",dog:"veh",meows:"adj",barks:"adj"},legend:{pets:"kitten, cat",veh:"puppy, dog",adj:"sounds"}},
+ {id:"eat",name:"Animals and what they eat",note:"6 sentences, 12 words, 24 pairs. Loss 2.77 → 1.81 in 30 epochs. Each pair of animals shares a verb, so cat/kitten, dog/puppy and cow/calf pair up.",
+  text:["cat drinks milk","kitten drinks milk","dog chews bone","puppy chews bone","cow eats grass","calf eats grass"],cfg:{WINDOW:1,D:2,LR:0.1,EPOCHS:30,K:3},
+  groups:{cat:"pets",kitten:"pets",dog:"fruit",puppy:"fruit",cow:"veh",calf:"veh"},legend:{pets:"cat, kitten",fruit:"dog, puppy",veh:"cow, calf",adj:"other words"}},
+ {id:"syn",name:"Words that mean the same",note:"8 sentences, 10 words, 32 pairs. Loss 2.77 → 1.30 in 30 epochs. like/love and hate/dislike are used in the same places, so they end up next to each other.",
+  text:["i like tea","i love tea","i like milk","i love milk","you hate rain","you dislike rain","you hate snow","you dislike snow"],cfg:{WINDOW:1,D:3,LR:0.1,EPOCHS:30,K:3},
+  groups:{like:"pets",love:"pets",hate:"fruit",dislike:"fruit",tea:"veh",milk:"veh",rain:"veh",snow:"veh"},legend:{pets:"like, love",fruit:"hate, dislike",veh:"tea, milk, rain, snow",adj:"i, you"}},
+ {id:"fast",name:"Pets, fruit and vehicles, shorter",note:"The same 27 sentences with LEARNING_RATE = 0.1 and only 10 epochs. Loss 2.77 → 1.92, and cats/dogs, apples/bananas, cars/buses already pair up.",text:DEFAULT_CORPUS,cfg:{WINDOW:1,D:3,LR:0.1,EPOCHS:10,K:3}},
+];
+const sameText=(a,b)=>a.length===b.length&&a.every((s,i)=>s===b[i]);
+const presetForText=t=>PRESETS.find(p=>sameText(p.text,t));
+let CUR_GROUPS=DEF_GROUPS, CUR_LEGEND=DEF_LEGEND;
+const GROUP=w=>CUR_GROUPS[w]||"adj";
+const GCOL={pets:"var(--g-pets)",fruit:"var(--g-fruit)",veh:"var(--g-veh)",adj:"var(--g-adj)"};
+const $=id=>document.getElementById(id);
+
+let RUN=null, NP=108, D=3, LR=0.05, EPOCHS=50, K=3, AXES=null, PSCALE=1.25, ST=null, stCache=-1;
+const isFileCorpus=c=>sameText(c.CORPUS,DEFAULT_CORPUS);
+const isFile=c=>c.WINDOW===FILE.WINDOW&&c.D===FILE.D&&c.LR===FILE.LR&&c.EPOCHS===FILE.EPOCHS&&c.K===FILE.K&&isFileCorpus(c);
+
+// top-2 principal axes of the centered, row-normalized embeddings (power iteration + deflation)
+function pcaAxes(E){
+  const d=E[0].length,n=E.map(r=>{const m=Math.hypot(...r)+1e-12;return r.map(v=>v/m)});
+  const mean=[...Array(d)].map((_,i)=>n.reduce((a,r)=>a+r[i],0)/NV);const c=n.map(r=>r.map((v,i)=>v-mean[i]));
+  const C=[...Array(d)].map((_,i)=>[...Array(d)].map((_,j)=>c.reduce((a,r)=>a+r[i]*r[j],0)));
+  const axes=[];
+  for(let k=0;k<2;k++){let v=[...Array(d)].map((_,i)=>Math.sin(i*1.7+k+1));
+    for(let it=0;it<300;it++){let w=C.map(r=>r.reduce((a,x,j)=>a+x*v[j],0));for(const a of axes){const p=w.reduce((s,x,i)=>s+x*a[i],0);w=w.map((x,i)=>x-p*a[i])}const m=Math.hypot(...w)||1;v=w.map(x=>x/m)}
+    const big=v.reduce((b,x,i)=>Math.abs(x)>Math.abs(v[b])?i:b,0);if(v[big]<0)v=v.map(x=>-x);axes.push(v)}
+  return axes;
+}
+
+// ---------- code listing ----------
+function codeLines(){
+  const hv=(k,v)=>`<span class="hv ${v!==FILE[k]?'changed':''}">${v}</span>`;
+  // [code, phase it belongs to, css class, raw html?]
+  const L=[
+ ["sentences = [[w.lower() for w in s.split()] for s in corpus]",null],
+ ["vocab = sorted(set(w for s in sentences for w in s))",null],
+ ["word_to_id = {w: i for i, w in enumerate(vocab)}",null],
+ ["",null],
+ [`WINDOW = ${hv('WINDOW',RUN.cfg.WINDOW)}`,null,"",true],
+ [`D = ${hv('D',D)}`,null,"",true],
+ [`LEARNING_RATE = ${hv('LR',LR)}`,null,"",true],
+ [`EPOCHS = ${hv('EPOCHS',EPOCHS)}`,null,"",true],
+ [`K = ${hv('K',K)}     # wrong words per real pair`,null,"",true],
+ ["vocab_length = len(vocab)",null],
+ ["",null],
+ ["# every (center, context) pair within WINDOW",null,"cm"],
+ ["pairs = []",null],
+ ["for s in sentences:",null],
+ ["    for i, center in enumerate(s):",null],
+ ["        for j in range(max(0, i-WINDOW), min(len(s), i+WINDOW+1)):",null],
+ ["            if j != i:",null],
+ ["                pairs.append((word_to_id[center], word_to_id[s[j]]))",null],
+ ["",null],
+ ["np.random.seed(42)",null],
+ ["E = np.random.randn(vocab_length, D) * 0.1",null],
+ ["W = np.random.randn(vocab_length, D) * 0.1  # one row per word",null],
+ ["",null],
+ ["# how often each word is picked as a wrong word",null,"cm"],
+ ["counts = np.bincount([word_to_id[w] for s in sentences for w in s])",null],
+ ["neg_probs = counts ** 0.75 / (counts ** 0.75).sum()",null],
+ ["",null],
+ ["def sample_negatives(context, K):","sample"],
+ ["    negatives = []","sample"],
+ ["    while len(negatives) < K:","sample"],
+ ["        word = np.random.choice(vocab_length, p=neg_probs)","sample"],
+ ["        if word != context:","sample"],
+ ["            negatives.append(word)","sample"],
+ ["    return negatives","sample"],
+ ["",null],
+ ["def sigmoid(x):",null],
+ ["    return 1 / (1 + np.exp(-np.clip(x, -15, 15)))",null],
+ ["",null],
+ ["losses = []",null],
+ ["for epoch in range(EPOCHS):","epoch"],
+ ["    np.random.shuffle(pairs)","shuffle"],
+ ["    total_loss = 0","shuffle"],
+ ["",null],
+ ["    for center, context in pairs:","pair"],
+ ["        # the real pair: push its score up",null,"cm"],
+ ["        h = E[center].copy()","h"],
+ ["        u = W[context].copy()","h"],
+ ["        score = h @ u","pscore"],
+ ["        total_loss += np.logaddexp(0, -score)","ploss"],
+ ["        error = sigmoid(score) - 1","perr"],
+ ["        E[center] -= LEARNING_RATE * error * u","pupd"],
+ ["        W[context] -= LEARNING_RATE * error * h","pupd"],
+ ["",null],
+ ["        # K wrong words: push their scores down",null,"cm"],
+ ["        for neg in sample_negatives(context, K):","sample"],
+ ["            h = E[center].copy()","neg"],
+ ["            u = W[neg].copy()","neg"],
+ ["            score = h @ u","neg"],
+ ["            total_loss += np.logaddexp(0, score)","neg"],
+ ["            error = sigmoid(score)","neg"],
+ ["            E[center] -= LEARNING_RATE * error * u","neg"],
+ ["            W[neg] -= LEARNING_RATE * error * h","neg"],
+ ["",null],
+ ["    losses.append(total_loss / len(pairs))","end"],
+ ["",null],
+ ["def plot_embeddings(E):","pca"],
+ ["    X = E / np.linalg.norm(E, axis=1, keepdims=True)","pca"],
+ ["    X = X - X.mean(axis=0)","pca"],
+ ["    C = X.T @ X","pca"],
+ ["    eigvals, eigvecs = np.linalg.eigh(C)","pca"],
+ ["    top2 = eigvecs[:, ::-1][:, :2]     # 2 largest","pca"],
+ ["    coords = X @ top2","pca"],
+ ["    plt.scatter(coords[:, 0], coords[:, 1])","pca"],
+ ["    for w, (x, y) in zip(vocab, coords):","pca"],
+ ["        plt.annotate(w, (x, y))","pca"],
+ ["    plt.show()","pca"],
+ ["",null],
+ ["plot_embeddings(E)","pca"],
+  ];
+  return L.map(([t,ph,cls,raw],i)=>[i+1,t,ph,cls||'',raw]);
+}
+// line numbers the explanations refer to, read from the listing so they never drift
+function lineOf(prefix,from=0){const L=codeLines();for(let i=from;i<L.length;i++)if(L[i][1].trimStart().startsWith(prefix))return L[i][0];return 0}
+function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;')}
+function drawCode(){$('src').innerHTML=codeLines().map(([n,t,ph,cls,raw])=>`<div class="ln ${cls||''}" data-ph="${ph||''}"><span class="n">${n??'…'}</span><span class="t">${raw?t:esc(t)}</span></div>`).join('')}
+
+const PH_LABEL={shuffle:"shuffle",pair:"pick pair",h:"lookup h, u",pscore:"score",ploss:"loss",perr:"error",pupd:"update",sample:"sample wrong words",end:"epoch end"};
+const phLabel=p=>p.startsWith('neg')?`wrong word ${+p.slice(3)+1}`:PH_LABEL[p];
+function phasesFor(k){
+  const L=[];if(k===0)L.push("shuffle");
+  L.push("pair","h","pscore","ploss","perr","pupd","sample");
+  for(let i=0;i<K;i++)L.push("neg"+i);
+  if(k===NP-1)L.push("end");
+  return L;
+}
+const isNeg=p=>/^neg\d+$/.test(p);
+// a code line lights up when the current phase is its phase (all K wrong words share lines 56-62)
+const lineOn=ph=>ph===S.ph||(ph==="neg"&&isNeg(S.ph))||(ph==="epoch"&&S.ph==="shuffle");
+
+let S={ep:0,k:0,ph:"shuffle"};
+function idx(){return S.ep*NP+S.k}
+function st(){const g=idx();if(stCache!==g){ST=stateAt(RUN,g);stCache=g}return ST}
+function move(dir){
+  const list=phasesFor(S.k); let i=list.indexOf(S.ph)+dir;
+  if(i>=list.length){ if(S.k<NP-1){S.k++;S.ph="pair"} else if(S.ep<EPOCHS-1){S.ep++;S.k=0;S.ph="shuffle"} else return false; }
+  else if(i<0){ if(S.k>0){S.k--;S.ph="neg"+(K-1)} else if(S.ep>0){S.ep--;S.k=NP-1;S.ph="end"} else return false; }
+  else S.ph=list[i];
+  render(); return true;
+}
+// which E/W the run-wide charts show: before this pair, or after all of its updates
+const afterPair=()=>S.ph==="end"||S.ph==="neg"+(K-1);
+
+// ---------- render helpers ----------
+const f=(v,d=4)=>(v>=0?" ":"")+v.toFixed(d);
+const fs=(v,d=4)=>v.toFixed(d);
+const vecTxt=(v,d=4,max=6)=>v.slice(0,max).map(x=>f(x,d)).join(', ')+(v.length>max?`, … (${v.length} values)`:'');
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const dimLabels=()=>[...Array(D)].map((_,i)=>`dim ${i}`);
+function heat(v,max){const a=Math.min(1,Math.abs(v)/(max||1));const pct=Math.round(a*85);return `color-mix(in oklab, ${v>=0?'var(--pos)':'var(--neg)'} ${pct}%, var(--surface))`}
+
+function matrixSVG(M,{rowLabels,colLabels,max,hiRows=[],tgtRows=[],targetCol=-1,cell=26,cellH=22,title=""}){
+  const R=M.length,C=M[0].length, showRL=rowLabels&&cellH>=11, lw=showRL?62:(rowLabels?40:6), th=colLabels?64:6;
+  const W=lw+C*cell+(colLabels?34:4), H=th+R*cellH+4;
+  let s=`<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="${title}">`;
+  if(colLabels) colLabels.forEach((l,j)=>{s+=`<text transform="translate(${lw+j*cell+cell/2+3},${th-6}) rotate(-60)" class="lbl" style="${j===targetCol?'fill:var(--target);font-weight:600':''}">${l}</text>`});
+  if(rowLabels&&!showRL) s+=`<text x="${lw-6}" y="${th+8}" text-anchor="end">0</text><text x="${lw-6}" y="${th+R*cellH}" text-anchor="end">${R-1}</text>`;
+  M.forEach((row,i)=>{
+    if(showRL) s+=`<text x="${lw-6}" y="${th+i*cellH+cellH/2+3.5}" text-anchor="end" class="lbl" style="${hiRows.includes(i)?'fill:var(--center);font-weight:600':tgtRows.includes(i)?'fill:var(--target);font-weight:600':''}">${rowLabels[i]}</text>`;
+    row.forEach((v,j)=>{s+=`<rect x="${lw+j*cell}" y="${th+i*cellH}" width="${Math.max(1,cell-1)}" height="${Math.max(1,cellH-1)}" fill="${heat(v,max)}"><title>${(rowLabels?rowLabels[i]:i)}, ${(colLabels?colLabels[j]:'dim '+j)}: ${v.toFixed(5)}</title></rect>`});
+  });
+  hiRows.forEach(i=>s+=`<rect x="${lw-1}" y="${th+i*cellH-1}" width="${C*cell+1}" height="${cellH+1}" fill="none" stroke="var(--center)" stroke-width="2"/>`);
+  tgtRows.forEach(i=>s+=`<rect x="${lw-1}" y="${th+i*cellH-1}" width="${C*cell+1}" height="${cellH+1}" fill="none" stroke="var(--target)" stroke-width="2"/>`);
+  if(targetCol>=0) s+=`<rect x="${lw+targetCol*cell-1}" y="${th-1}" width="${cell+1}" height="${R*cellH+1}" fill="none" stroke="var(--target)" stroke-width="2"/>`;
+  return s+'</svg>';
+}
+function barsSVG(vals,{target,center,ref=null,zero=true,max=null,min=null,label=""}){
+  const cell=26,lw=48,H=170,th=10,bh=100,W=lw+NV*cell+4;
+  const mx=max??Math.max(...vals,ref??0), mn=min??Math.min(0,...vals);
+  const y=v=>th+bh*(mx-v)/((mx-mn)||1);
+  let s=`<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="${label}">`;
+  [mx,(mx+mn)/2,mn].forEach(t=>{s+=`<line x1="${lw}" x2="${W}" y1="${y(t)}" y2="${y(t)}" class="axis" stroke-dasharray="2 3"/><text x="${lw-4}" y="${y(t)+3}" text-anchor="end">${Math.abs(t)<1e-9?'0':t.toFixed(Math.abs(t)<0.1?3:2)}</text>`});
+  vals.forEach((v,j)=>{const y0=y(0),y1=y(v);const col=j===target?'var(--target)':(j===center?'var(--center)':'var(--faint)');
+    s+=`<rect x="${lw+j*cell+3}" y="${Math.min(y0,y1)}" width="${cell-6}" height="${Math.max(1,Math.abs(y1-y0))}" fill="${col}"><title>${V[j]}: ${v.toFixed(6)}</title></rect>`;
+    s+=`<text transform="translate(${lw+j*cell+cell/2+3},${th+bh+8}) rotate(-60)" text-anchor="end" class="lbl" style="${j===target?'fill:var(--target);font-weight:600':''}">${V[j]}</text>`});
+  if(ref!=null) s+=`<line x1="${lw}" x2="${W}" y1="${y(ref)}" y2="${y(ref)}" stroke="var(--fg)" stroke-width="1"/><text x="${W-2}" y="${y(ref)-4}" text-anchor="end" class="lbl">1/${NV} = ${ref.toFixed(4)}</text>`;
+  if(zero) s+=`<line x1="${lw}" x2="${W}" y1="${y(0)}" y2="${y(0)}" stroke="var(--muted)"/>`;
+  return s+'</svg>';
+}
+function vecSVG(v,{max,label}){
+  const n=v.length, cell=n<=8?48:clamp(Math.floor(380/n),6,40), nums=n<=8;
+  const W=n*cell+4,H=30;let s=`<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="${label}">`;
+  v.forEach((x,i)=>{s+=`<rect x="${i*cell}" y="2" width="${cell-2}" height="26" fill="${heat(x,max)}"><title>dim ${i}: ${x.toFixed(5)}</title></rect>`;if(nums)s+=`<text x="${i*cell+cell/2-1}" y="19" text-anchor="middle" class="lbl">${x.toFixed(3)}</text>`});
+  return s+'</svg>';
+}
+const topk=(a,n)=>a.map((v,i)=>[v,i]).sort((p,q)=>q[0]-p[0]).slice(0,n);
+const wCellH=()=>clamp(Math.floor(240/D),4,22);
+
+// ---------- stage per phase ----------
+// plain-language summary for the top card: what happens, and why it matters
+const SUM=(what,why)=>`<div class="explain"><p><b>What happens</b> ${what}</p><p><b>Why it matters</b> ${why}</p></div>`;
+const pct=v=>(100*v).toFixed(2)+'%';
+function vecPair(rows,max){ // rows: [label, vector, css color]
+  return `<div style="display:flex;flex-direction:column;gap:8px;min-width:0">${rows.map(([l,v,col])=>`<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><span class="mono" style="min-width:9ch;${col?`color:${col};font-weight:600`:''}">${l}</span><div class="viz">${vecSVG(v,{max,label:l})}</div></div>`).join('')}</div>`;
+}
+function stageHTML(){
+  const s=st(), {c,x,pos,neg,Wb,Eb,Wa,Ea}=s, cw=V[c], xw=V[x];
+  const pair=`<div class="pairline"><span class="big"><span class="c-center">${cw}</span> → <span class="c-target">${xw}</span></span><span class="mono note">(center, context) = (${c}, ${x}) · epoch ${S.ep+1}, pair ${S.k+1} of ${NP} · update ${idx()+1} of ${NP*EPOCHS}</span></div>`;
+  const Emax=Math.max(...Eb.flat().map(Math.abs)), Wmax=Math.max(...Wb.flat().map(Math.abs));
+  const cell=clamp(Math.floor(300/D),6,44);
+  if(isNeg(S.ph)){
+    const i=+S.ph.slice(3), q=neg[i], nw=V[q.n], m=Math.max(...[q.h,q.u,q.hA,q.uA].flat().map(Math.abs));
+    const sB=q.score, sA=dot(q.hA,q.uA);
+    return pair+`<p class="note" style="margin:0">Wrong word ${i+1} of ${K}: <b>${nw}</b></p>`+
+    SUM(`Ask the same yes/no question for <b>${nw}</b>, a randomly drawn word: "is ${nw} a neighbour of ${cw}?" The score is h · W[${nw}] = <span class="mono">${n4(sB)}</span>, so the model says yes with ${pct(q.sg)}. The right answer here is no, so the loss is −ln(1 − ${n4(q.sg)}) = <span class="mono">${n4(q.loss)}</span> and the error is just the chance it gave: <span class="mono">${n4(q.err)}</span>.`,
+      `Both vectors move a little away from each other, so next time ${nw}'s score with ${cw} is lower: <span class="mono">${n4(sB)}</span> → <span class="mono">${n4(sA)}</span>. Only ${cw}'s row of E and ${nw}'s row of W change. ${q.sg<0.1?`The model was already fairly sure (only ${pct(q.sg)}), so the push is small.`:`The model gave it ${pct(q.sg)}, so the push is sizeable.`}`)+
+    vecPair([[`h = E[${cw}]`,q.h,'var(--center)'],[`u = W[${nw}]`,q.u,''],[`h after`,q.hA,'var(--center)'],[`u after`,q.uA,'']],m)+
+    `<div class="row2"><div class="viz">${sigmoidMini(sB,'σ(score)')}</div><div class="viz">${lossMini(sB,false)}</div></div>`;
+  }
+  switch(S.ph){
+  case "shuffle":{
+    const ord=RUN.order[S.ep].slice(0,12).map(([a,b])=>`(${V[a]}, ${V[b]})`).join('  ');
+    return `<div class="pairline"><span class="big">Epoch ${S.ep+1} of ${EPOCHS} begins</span></div>
+    ${SUM(`All ${NP} word pairs are put in a new random order, and the running total of the loss is set back to 0.`,`The model learns a little after every single pair, so the order affects what it learns first. A fresh order each epoch stops it from always learning the same pairs first.`)}
+    <h3>First 12 pairs this epoch</h3><div class="math">${ord} …</div>
+    <p class="note">The pairs are made exactly as in chapter 01: each word paired with every word up to ${RUN.cfg.WINDOW} position${RUN.cfg.WINDOW>1?'s':''} away in its own sentence. ${SENTS.length} sentences give ${NP} pairs.</p>`;}
+  case "pair":
+    return pair+SUM(`Take the next pair: <span class="c-center">${cw}</span> is the center word and <span class="c-target">${xw}</span> really appeared next to it. Instead of scoring all ${NV} words like chapter 01, the model now answers ${K+1} yes/no questions: "is <span class="c-target">${xw}</span> a neighbour of ${cw}?" (answer: yes), then the same question for ${K} randomly drawn words (answer: no).`,
+      `Chapter 01 computed a chance for every word in the vocabulary on every step. That's fine for ${NV} words, but real vocabularies have hundreds of thousands. Here each step touches only ${K+1} words, however big the vocabulary is.`)+
+    `<div class="math">full softmax (chapter 01): ${NV} scores per pair
+negative sampling (here):  1 real + ${K} wrong = ${K+1} scores per pair</div>`;
+  case "h":
+    return pair+SUM(`Read <span class="c-center">${cw}</span>'s row from E (that's h) and <span class="c-target">${xw}</span>'s row from W (that's u). Unlike chapter 01, W now has one <em>row</em> per word, the same shape as E.`,
+      `Every word has two vectors: one in E for when it's the center word, and one in W for when it's being checked as a neighbour. The question "is ${xw} a neighbour of ${cw}?" only needs these two.`)+
+    `<div class="row2"><div><h3>E <span class="shape">(${NV}, ${D})</span></h3><div class="viz">${matrixSVG(Eb,{rowLabels:V,max:Emax,hiRows:[c],cell,cellH:16,title:"E matrix"})}</div></div>
+    <div><h3>W <span class="shape">(${NV}, ${D})</span></h3><div class="viz">${matrixSVG(Wb,{rowLabels:V,max:Wmax,tgtRows:[x],cell,cellH:16,title:"W matrix"})}</div></div>
+    <div style="display:flex;flex-direction:column;gap:8px;min-width:0">${vecPair([['h',pos.h,'var(--center)'],['u',pos.u,'var(--target)']],Math.max(Emax,Wmax))}<p class="note" style="max-width:34ch">Red is positive, blue is negative. Hover any cell for its exact value.</p></div></div>`;
+  case "pscore":
+    return pair+SUM(`Multiply h and u number by number and add the products up: one score, <span class="mono">${n4(pos.score)}</span>. Then the sigmoid squashes it into a chance between 0% and 100%: σ(${n4(pos.score)}) = ${pct(pos.sg)}.`,
+      `This chance is the model's answer to "is ${xw} a neighbour of ${cw}?". A big positive score means "yes", a big negative score means "no", and 0 means 50/50. ${Math.abs(pos.score)<0.1?'Right now it is close to 50/50: the model has no idea yet.':''}`)+
+    `<div class="math">score = ${pos.h.map((v,i)=>`(${n4(v)})(${n4(pos.u[i])})`).join(' + ')}
+      = ${n5(pos.score)}
+σ(score) = 1 / (1 + e^${pos.score<0?'+':'−'}${n4(Math.abs(pos.score))}) = ${n5(pos.sg)}</div>
+    <div class="viz">${sigmoidMini(pos.score,'σ(score)')}</div>`;
+  case "ploss":
+    return pair+SUM(`The right answer is "yes", so the loss is −ln of the chance the model gave to yes: −ln(${n4(pos.sg)}) = <span class="mono">${n4(pos.loss)}</span>. The code writes it as <code>np.logaddexp(0, -score)</code>, which is the same number computed without overflow.`,
+      `A 100% yes would cost 0. A 50/50 guess costs ln 2 = 0.693. This is the first of ${K+1} loss terms for this pair; each wrong word adds one more.`)+
+    `<div class="math">loss = −ln σ(score) = ln(1 + e^(−score)) = ${n5(pos.loss)}
+total_loss = ${n4(s.runBefore+pos.loss)}   (running sum this epoch)</div>
+    <div class="viz">${lossMini(pos.score,true)}</div>`;
+  case "perr":
+    return pair+SUM(`How the loss changes when the score changes: σ(score) − 1 = ${n4(pos.sg)} − 1 = <span class="mono">${n4(pos.err)}</span>. It's negative, which means "raise this score". Multiplying it by u gives the nudge for h, and multiplying it by h gives the nudge for u.`,
+      `The error is "the chance the model gave minus the chance it should have given" (1 for a real pair), exactly like p − y in chapter 01. The less sure the model was, the bigger the push.`)+
+    vecPair([['error × u',pos.gh,'var(--center)'],['error × h',pos.gu,'var(--target)']],Math.max(...pos.gh.map(Math.abs),...pos.gu.map(Math.abs)))+
+    `<div class="math">gradient for h = ${n4(pos.err)} × [${vecTxt(pos.u)}] = [${vecTxt(pos.gh,5)}]
+gradient for u = ${n4(pos.err)} × [${vecTxt(pos.h)}] = [${vecTxt(pos.gu,5)}]</div>`;
+  case "pupd":{
+    const sA=dot(pos.hA,pos.uA), m=Math.max(...[pos.h,pos.u,pos.hA,pos.uA].flat().map(Math.abs));
+    return pair+SUM(`Take a small step (LEARNING_RATE = ${LR}) against both gradients. <span class="c-center">${cw}</span>'s row of E moves toward <span class="c-target">${xw}</span>'s row of W, and ${xw}'s row moves toward ${cw}'s.`,
+      `The score for (${cw}, ${xw}) went from <span class="mono">${n5(pos.score)}</span> to <span class="mono">${n5(sA)}</span>, so the model now says yes a little more: ${pct(pos.sg)} → ${pct(sigmoid(sA))}. Only these two rows changed; the other ${2*NV-2} rows are untouched.`)+
+    vecPair([[`E[${cw}] before`,pos.h,'var(--center)'],[`E[${cw}] after`,pos.hA,'var(--center)'],[`W[${xw}] before`,pos.u,'var(--target)'],[`W[${xw}] after`,pos.uA,'var(--target)']],m);}
+  case "sample":{
+    const P=RUN.NT.P;
+    return pair+SUM(`Draw ${K} wrong words at random, using the chances in the chart (count<sup>0.75</sup>, scaled to add up to 1). If the draw is the real context word (<span class="c-target">${xw}</span>), throw it away and draw again. This time: ${s.draws.map(d=>d.w===x?`<s>${V[d.w]}</s>`:`<b>${V[d.w]}</b>`).join(', ')}.`,
+      `The wrong words give the model something to say "no" to. Without them it could just make every score huge and say "yes" to everything. Frequent words like ${V[P.indexOf(Math.max(...P))]} are drawn more often, but the 0.75 power gives rare words a slightly better chance than their raw count would.`)+
+    `<div><h3>chance of being drawn as a wrong word <span class="shape">(${NV},)</span></h3><div class="viz">${barsSVG(P,{target:x,min:0,label:"negative sampling probabilities"})}</div></div>
+    <div class="math">${s.draws.map((d,i)=>`draw ${i+1}: random number ${d.u.toFixed(6)} → ${V[d.w]}${d.w===x?'   (the real context word: rejected, draw again)':''}`).join('\n')}</div>`;}
+  case "end":{
+    const L=RUN.losses[S.ep];
+    return `<div class="pairline"><span class="big">End of epoch ${S.ep+1}</span></div>
+    ${SUM(`Average this epoch's loss over the ${NP} real pairs and save it. That's one point on the loss chart.`,`Each pair added ${K+1} terms (1 real + ${K} wrong), so a model that knows nothing scores about ${K+1} × ln 2 = ${((K+1)*Math.LN2).toFixed(3)} per pair. Lower than that means it's learning.`)}
+    <div class="math">losses[${S.ep}] = ${s.total.toFixed(4)} / ${NP} = ${L.toFixed(4)}</div>
+    <div class="math">${RUN.losses.slice(0,EPOCHS).map((l,i)=>`epoch ${i+1}: ${i<=S.ep?l.toFixed(4):'  …   '}`).join('\n')}</div>`;}
+  }
+}
+// small charts for one score: the sigmoid, and the loss as a function of the score
+function curveSVG(fn,sx,{ymax,label,ylabel}){
+  const W=360,H=150,l=40,b=26,t=8,r=10,lo=-6,hi=6;const xs=v=>l+(W-l-r)*(v-lo)/(hi-lo), ys=v=>t+(H-t-b)*(1-v/ymax);
+  let d='';for(let i=0;i<=120;i++){const v=lo+(hi-lo)*i/120;d+=(i?'L':'M')+xs(v).toFixed(1)+','+ys(Math.min(ymax,fn(v))).toFixed(1)}
+  let s=`<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="${label}">`;
+  [0,ymax/2,ymax].forEach(v=>s+=`<line x1="${l}" x2="${W-r}" y1="${ys(v)}" y2="${ys(v)}" class="axis"/><text x="${l-5}" y="${ys(v)+3}" text-anchor="end">${+v.toFixed(2)}</text>`);
+  [-6,-3,0,3,6].forEach(v=>s+=`<text x="${xs(v)}" y="${H-b+14}" text-anchor="middle">${v}</text>`);
+  s+=`<text x="${(l+W)/2}" y="${H-1}" text-anchor="middle">score</text>`;
+  s+=`<path d="${d}" fill="none" stroke="var(--muted)" stroke-width="1.5"/>`;
+  const px=clamp(sx,lo,hi),py=Math.min(ymax,fn(sx));
+  s+=`<circle cx="${xs(px)}" cy="${ys(py)}" r="5" fill="var(--target)"/><text x="${Math.min(xs(px)+9,W-60)}" y="${ys(py)-6}" class="lbl">${ylabel}</text>`;
+  return s+'</svg>';
+}
+const sigmoidMini=(sc,lbl)=>curveSVG(sigmoid,sc,{ymax:1,label:'sigmoid curve',ylabel:lbl});
+const lossMini=(sc,positive)=>curveSVG(positive?v=>logaddexp0(-v):v=>logaddexp0(v),sc,{ymax:6,label:'loss curve',ylabel:positive?'−ln σ(s)':'−ln(1 − σ(s))'});
+
+// ---------- run-wide charts ----------
+function niceStep(range){const r=range/5,p=Math.pow(10,Math.floor(Math.log10(r)));for(const m of[1,2,2.5,5,10])if(m*p>=r)return m*p;return 10*p}
+function lossChart(){
+  const ext=$('chk50').checked&&RUN.losses.length>EPOCHS;
+  const nE=ext?RUN.losses.length:EPOCHS, W=560,H=260,l=44,r=14,t=12,b=34;
+  const shown=ext?RUN.losses:RUN.losses.slice(0,EPOCHS);
+  let ymin=Math.min(...shown), ymax=Math.max(...shown,(K+1)*Math.LN2);
+  if(!ext){const pl=RUN.steps.map(s=>s.loss).sort((a,b)=>a-b);ymin=Math.min(ymin,pl[Math.floor(pl.length*0.05)]);ymax=Math.max(ymax,pl[Math.floor(pl.length*0.95)])}
+  const pad=(ymax-ymin)*0.08||0.05;ymin-=pad;ymax+=pad;
+  const step=niceStep(ymax-ymin), ticks=[];for(let v=Math.ceil(ymin/step)*step;v<=ymax+1e-9;v+=step)ticks.push(v);
+  const xs=e=>l+(W-l-r)*e/nE, ys=v=>t+(H-t-b)*(ymax-v)/(ymax-ymin);
+  let s=`<svg width="100%" viewBox="0 0 ${W} ${H}" style="max-width:${W}px" role="img" aria-label="loss chart">`;
+  const dec=step<0.1?2:1;
+  ticks.forEach(v=>s+=`<line x1="${l}" x2="${W-r}" y1="${ys(v)}" y2="${ys(v)}" class="axis"/><text x="${l-6}" y="${ys(v)+3}" text-anchor="end">${v.toFixed(dec)}</text>`);
+  const xstep=nE<=10?1:nE<=25?5:10;for(let e=0;e<=nE;e+=xstep)s+=`<text x="${xs(e)}" y="${H-b+15}" text-anchor="middle">${e}</text>`;
+  s+=`<text x="${(l+W)/2}" y="${H-4}" text-anchor="middle">epochs completed</text>`;
+  const cur=idx();
+  if(!ext){const every=Math.max(1,Math.ceil(RUN.steps.length/1500));RUN.steps.forEach((q,i)=>{if(i>cur||i%every)return;if(q.loss<ymin||q.loss>ymax)return;s+=`<circle cx="${xs((i+1)/NP).toFixed(1)}" cy="${ys(q.loss).toFixed(1)}" r="1.4" fill="var(--faint)" opacity=".55"/>`});}
+  const u=(K+1)*Math.LN2;if(u>=ymin&&u<=ymax)s+=`<line x1="${l}" x2="${W-r}" y1="${ys(u)}" y2="${ys(u)}" stroke="var(--muted)" stroke-dasharray="4 4"/><text x="${W-r}" y="${ys(u)-5}" text-anchor="end" class="lbl">no idea yet: (K+1) ln 2 = ${u.toFixed(4)}</text>`;
+  if(false) s+=`<line x1="${l}" x2="${W-r}" y1="${ys(RUN.floor)}" y2="${ys(RUN.floor)}" stroke="var(--g-pets)" stroke-dasharray="4 4"/><text x="${W-r}" y="${ys(RUN.floor)+13}" text-anchor="end" style="fill:var(--g-pets)">best possible ≈ ${RUN.floor.toFixed(2)}</text>`;
+  if(ext){let d='';RUN.losses.forEach((v,i)=>d+=(i?'L':'M')+xs(i+1)+','+ys(v));s+=`<path d="${d}" fill="none" stroke="var(--faint)" stroke-width="1.5" stroke-dasharray="3 3"/>`}
+  const done=S.ph==="end"?S.ep+1:S.ep;
+  let d='';RUN.losses.slice(0,done).forEach((v,i)=>d+=(i?'L':'M')+xs(i+1)+','+ys(v));
+  if(done>1)s+=`<path d="${d}" fill="none" stroke="var(--center)" stroke-width="2.2"/>`;
+  RUN.losses.slice(0,done).forEach((v,i)=>s+=`<circle cx="${xs(i+1)}" cy="${ys(v)}" r="${nE>30?2.5:4}" fill="var(--center)"><title>epoch ${i+1}: ${v.toFixed(4)}</title></circle>`);
+  if(!ext&&S.ph!=="shuffle"){const q=RUN.steps[cur];if(!["pair","h","pscore","ploss","perr","pupd","sample"].includes(S.ph)&&!(isNeg(S.ph)&&S.ph!=="neg"+(K-1))){const y=clamp(q.loss,ymin,ymax);s+=`<circle cx="${xs((cur+1)/NP)}" cy="${ys(y)}" r="4.5" fill="var(--target)"/>`}
+    else s+=`<line x1="${xs((cur+1)/NP)}" x2="${xs((cur+1)/NP)}" y1="${t}" y2="${H-b}" stroke="var(--target)" opacity=".5"/>`}
+  return s+'</svg>';
+}
+// for every word as center: sigmoid(E[w] · W[j]) for every word j, next to the neighbours it really has
+function predTable(){
+  const s=st(), after=afterPair(), E=after?s.Ea:s.Eb, W=after?s.Wa:s.Wb, cur=S.ph!=="shuffle"?s.c:-1;
+  const real=V.map(()=>({}));for(const q of RUN.steps)if(q.ep===0)real[q.c][q.x]=(real[q.c][q.x]||0)+1;
+  let hits=0,rows='',centers=0;
+  V.forEach((w,c)=>{const r=real[c],tot=Object.values(r).reduce((a,b)=>a+b,0);if(!tot)return;centers++;
+    const p=V.map((_,j)=>sigmoid(dot(E[c],W[j])));
+    const top=p.map((v,j)=>[v,j]).sort((a,b)=>b[0]-a[0]).slice(0,Math.min(3,NV));
+    if(r[top[0][1]])hits++;
+    const rj=Object.keys(r).map(Number), others=V.map((_,j)=>j).filter(j=>!r[j]);
+    const avgR=rj.reduce((a,j)=>a+p[j],0)/rj.length, avgO=others.length?others.reduce((a,j)=>a+p[j],0)/others.length:0;
+    rows+=`<tr class="${c===cur?'cenrow':''}"><th class="rl">${w}</th>
+      <td>${Object.entries(r).sort((a,b)=>b[1]-a[1]).map(([j,n])=>`<span class="pw">${V[j]}</span>`).join('')}</td>
+      <td>${top.map(([v,j])=>`<span class="pw ${r[j]?'ok':'no'}">${V[j]} ${(100*v).toFixed(1)}%</span>`).join('')}</td>
+      <td class="num"><span class="pbar" style="width:${Math.round(60*avgR)}px"></span>${(100*avgR).toFixed(1)}%</td>
+      <td class="num">${(100*avgO).toFixed(1)}%</td></tr>`});
+  $('predNote').textContent=`${after?'after':'before'} update ${idx()+1} of ${NP*EPOCHS} · top guess is a real neighbour for ${hits} of ${centers} words`;
+  return `<table class="wt"><thead><tr><th class="rl">center word</th><th>real neighbours</th><th>model's top ${Math.min(3,NV)} yes answers: σ(E[word] · W[j])</th><th class="num" style="text-align:right">avg yes for real neighbours</th><th class="num" style="text-align:right">avg yes for other words</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+// ---------- PCA explained: every step of plot_embeddings(E) on this run's final E ----------
+function rowTable(head,rows){ // head: [html...], rows: [{cls,cells:[html...]}]; first cell is a sticky label
+  return `<div class="scroll" style="align-self:flex-start;max-width:100%"><table class="wt"><thead><tr>${head.map((h,i)=>`<th class="${i?'':'rl'}">${h}</th>`).join('')}</tr></thead><tbody>${
+    rows.map(r=>`<tr class="${r.cls||''}">${r.cells.map((c,i)=>i?`<td class="${(r.tdc||[])[i]||''}">${c}</td>`:`<th class="rl">${c}</th>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+}
+const PSUM=(what,why)=>`<div class="explain"><p><b>What happens</b> ${what}</p><p><b>Why it matters</b> ${why}</p></div>`;
+const vec=(v,f=n4)=>`[${v.map(f).join(', ')}]`;
+function pcaChart(){
+  const s=st(), after=afterPair();
+  const E=after?s.Ea:s.Eb, c=s.c, x=s.x, showPair=S.ph!=="shuffle";
+  const P=project(E);
+  const W=560,H=380,pad=30,xs=v=>W/2+v*(W/2-pad)/PSCALE, ys=v=>H/2-v*(H/2-pad)/PSCALE;
+  let o=`<svg width="100%" viewBox="0 0 ${W} ${H}" style="max-width:${W}px" role="img" aria-label="embedding space">`;
+  [-1,-0.5,0,0.5,1].map(v=>v*PSCALE/1.25).forEach(v=>{o+=`<line x1="${xs(v)}" x2="${xs(v)}" y1="${pad/2}" y2="${H-pad/2}" class="axis" opacity=".6"/><line y1="${ys(v)}" y2="${ys(v)}" x1="${pad/2}" x2="${W-pad/2}" class="axis" opacity=".6"/>`});
+  o+=`<text x="${W-pad/2}" y="${ys(0)-5}" text-anchor="end">PC1</text><text x="${xs(0)+5}" y="${pad/2+8}">PC2</text>`;
+  P.forEach(([px,py],i)=>{const isC=showPair&&i===c,isX=showPair&&i===x;
+    o+=`<circle cx="${xs(px).toFixed(1)}" cy="${ys(py).toFixed(1)}" r="${isC||isX?7:5}" fill="${GCOL[GROUP(V[i])]}" ${isC?'stroke="var(--center)" stroke-width="3"':''}${isX?'stroke="var(--target)" stroke-width="3"':''}><title>${V[i]}: (${px.toFixed(2)}, ${py.toFixed(2)})</title></circle>`;
+    o+=`<text x="${(xs(px)+8).toFixed(1)}" y="${(ys(py)+3.5).toFixed(1)}" class="lbl" style="font-size:10.5px;${isC?'fill:var(--center);font-weight:600':isX?'fill:var(--target);font-weight:600':''}">${V[i]}</text>`});
+  o+=`<text x="${pad/2}" y="${H-6}">${after?'after':'before'} update ${idx()+1} of ${NP*EPOCHS}</text>`;
+  return o+'</svg>';
+}
+function project(E){
+  const n=E.map(r=>{const m=Math.hypot(...r)+1e-12;return r.map(v=>v/m)});
+  const mean=[...Array(D)].map((_,i)=>n.reduce((a,r)=>a+r[i],0)/NV);
+  return n.map(r=>AXES.map(a=>a.reduce((q,ai,i)=>q+ai*(r[i]-mean[i]),0)));
+}
+// ---------- worked math for the current line ----------
+const MAXD=Infinity; // show every dimension
+const n3=v=>v.toFixed(3), n4=v=>v.toFixed(4), n5=v=>v.toFixed(5);
+const sgn=v=>`<span class="${v<0?'neg':'pos'}">${n4(v)}</span>`;
+const par=v=>v<0?`(${n4(v)})`:n4(v);
+function dimsNote(){return D>MAXD?`<p class="note">Showing the first ${MAXD} of ${D} dimensions. Every sum below still uses all ${D}.</p>`:''}
+// table: columns = ${NV} words. rows: [{label, vals, cls, fmt, key:[j...]}]
+function wordTable(rows,{ctx,best=-1,corner=""}){
+  let s=`<table class="wt"><thead><tr><th class="rl">${corner}</th>`;
+  V.forEach((w,j)=>s+=`<th class="${j===ctx?'ctx':''}">${w}${j===ctx?' ★':''}</th>`);
+  s+='</tr></thead><tbody>';
+  rows.forEach(r=>{s+=`<tr class="${r.cls||''}"><th class="rl">${r.label}</th>`;
+    r.vals.forEach((v,j)=>{const c=[j===ctx?'ctx':'',(r.key||[]).includes(j)?'key':'',j===best&&r.markBest?'best':''].join(' ');
+      s+=`<td class="${c}">${typeof v==='string'?v:(r.fmt||n3)(v)}</td>`});
+    s+='</tr>'});
+  return s+'</tbody></table>';
+}
+function callouts(items){return `<ul class="callouts">${items.map(t=>`<li>${t}</li>`).join('')}</ul>`}
+function sumLine(terms,res,lbl){return `<div class="math">${lbl} = ${terms.join(' + ')}\n${' '.repeat(lbl.length)} = <b>${n5(res)}</b></div>`}
+
+// one dot product as a vertical sum: rows [label, a, b, highlight?]
+function dotWork({title,rows,aLbl,bLbl,res,kind}){
+  let t=`<table class="wt"><thead><tr><th class="rl"></th><th>${aLbl}</th><th class="op">×</th><th>${bLbl}</th><th class="op">=</th><th>product</th></tr></thead><tbody>`;
+  rows.forEach(([l,a,b,hi])=>{t+=`<tr class="${hi?'ctxrow':''}"><th class="rl">${l}</th><td>${n4(a)}</td><td class="op">×</td><td>${n4(b)}</td><td class="op">=</td><td>${n5(a*b)}</td></tr>`});
+  t+=`<tr class="res"><th class="rl">sum</th><td></td><td></td><td></td><td class="op">=</td><td class="${kind==='ctx'?'key':kind==='best'?'best':kind==='key'?'key':''}">${n5(res)}</td></tr></tbody></table>`;
+  return `<div class="card ${kind==='ctx'?'cardctx':kind==='best'?'cardbest':''}"><div class="eqcap">${title}</div><div class="scroll">${t}</div></div>`;
+}
+const TB=s=>`<div class="formula">\\[${s}\\]</div>`; // display TeX block
+const tw=w=>String.raw`\text{${w}}`;
+// numbered derivation: steps [text, tex?]
+const DV=(title,steps)=>`<h3>${title}</h3><ol class="deriv">${steps.map(([t,x])=>`<li><p>${t}</p>${x?TB(x):''}</li>`).join('')}</ol>`;
+// symbol key: rows [tex, meaning]
+const GL=(rows,cap='What each symbol means')=>`<div class="gloss"><div class="gcap">${cap}</div>${rows.map(([s,m])=>`<div class="gs">\\(${s}\\)</div><div class="gm"><span>${m}</span></div>`).join('')}</div>`; // 2 pairs per row (1 on phones)
+const sExp=j=>{const n=Math.min(D,10),t=[...Array(n)].map((_,i)=>String.raw`h_{${i}}W_{${i},${j}}`);if(D>n)t.push(String.raw`\cdots`,String.raw`h_{${D-1}}W_{${D-1},${j}}`);return t.join(' + ')}; // s_j written out
+// one row per dimension, one column per vector: cols [[header, vector, fmt, keyColumn?]]
+function dimTable(cols,{res=null}={}){
+  let t=`<table class="wt"><thead><tr><th class="rl">dim i</th>${cols.map(([h])=>`<th>${h}</th>`).join('')}</tr></thead><tbody>`;
+  for(let i=0;i<D;i++)t+=`<tr><th class="rl">${i}</th>${cols.map(([,v,f,key])=>`<td class="${key?'key':''}">${(f||n5)(v[i])}</td>`).join('')}</tr>`;
+  if(res)t+=`<tr class="res"><th class="rl">${res[0]}</th>${cols.map((_,j)=>`<td>${res[1][j]??''}</td>`).join('')}</tr>`;
+  return `<div class="scroll" style="align-self:flex-start;max-width:100%">${t}</tbody></table></div>`;
+}
+const sigTeX=(s,eq='=')=>String.raw`\sigma(${n4(s)}) ${eq} \frac{1}{1 + e^{${n4(-s)}}} = \frac{1}{1 + ${n5(Math.exp(-s))}} = ${n5(sigmoid(s))}`;
+function workedHTML(){
+  const s=st(), {c,x,pos,neg,Wb,Eb,Wa,Ea}=s, cw=V[c], xw=V[x];
+  const head=(t,sub,tex)=>`<div class="wk-head"><h2>${t}</h2>${sub?`<span class="note">${sub}</span>`:''}</div>${tex?`<div class="formula">\\[${tex}\\]</div>`:''}`;
+  if(isNeg(S.ph)){
+    const i=+S.ph.slice(3), q=neg[i], nw=V[q.n], sA=dot(q.hA,q.uA);
+    const prevNote=i===0?`the positive update on lines 51–52`:`the positive update and wrong word${i>1?'s':''} ${[...Array(i)].map((_,k)=>k+1).join(', ')}`;
+    return head(`Wrong word ${i+1} of ${K}: ${nw}`,"lines 56–62",String.raw`L^{-} = -\ln\bigl(1-\sigma(s)\bigr) = \ln\bigl(1+e^{s}\bigr), \qquad \frac{\partial L^{-}}{\partial s} = \sigma(s), \qquad s = h\cdot u_{${tw(nw)}}`)+
+    GL([[String.raw`u_{${tw(nw)}}`,`${nw}'s row of W, <code>W[neg]</code> (line 57).`],
+      [String.raw`h`,`${cw}'s row of E, read again on line 56. It already includes ${prevNote}, so it's not the same h as on line 46.`],
+      [String.raw`s`,`the score h · u for this wrong word (line 58).`],
+      [String.raw`1-\sigma(s)`,`the chance the model gives to the right answer, "no, not a neighbour".`],
+      [String.raw`L^{-}`,`this wrong word's loss term, <code>np.logaddexp(0, score)</code> (line 59).`],
+      [String.raw`\delta`,String.raw`\(\partial L^-/\partial s = \sigma(s)\), the <code>error</code> on line 60. Always positive: "lower this score".`]])+
+    DV("1 · Where the loss and its slope come from",[
+      [String.raw`For a wrong word the right answer is "no", so the loss is −ln of the chance of "no", which is \(1-\sigma(s)\). Rewrite \(1-\sigma(s)\) by putting both terms over \(1+e^{-s}\):`,String.raw`1-\sigma(s) = 1-\frac{1}{1+e^{-s}} = \frac{e^{-s}}{1+e^{-s}} = \frac{1}{e^{s}+1} = \sigma(-s)`],
+      [String.raw`So the loss is \(-\ln\sigma(-s)\), and the same steps as for the real pair turn it into \(\ln(1+e^{s})\). That is \(\ln(e^0+e^{s})\), which is <code>np.logaddexp(0, score)</code>:`,String.raw`L^{-} = -\ln\frac{1}{1+e^{s}} = \ln\bigl(1+e^{s}\bigr)`],
+      [String.raw`Differentiate with the chain rule (\(\tfrac{d}{du}\ln u = \tfrac1u\), and the derivative of \(1+e^{s}\) is \(e^{s}\)):`,String.raw`\frac{\partial L^{-}}{\partial s} = \frac{e^{s}}{1+e^{s}} = \frac{1}{e^{-s}+1} = \sigma(s)`],
+      [String.raw`So the error for a wrong word is just the "yes" chance the model wrongly gave it. 0 would mean "already sure it's not a neighbour, nothing to fix".`],
+      [String.raw`The score is a dot product, so as before \(\partial s/\partial h_i = u_i\) and \(\partial s/\partial u_i = h_i\):`,String.raw`\nabla_h L^{-} = \sigma(s)\,u, \qquad \nabla_u L^{-} = \sigma(s)\,h`]])+
+    `<h3>2 · The score</h3><div class="cards">${dotWork({title:`s = h · W[${nw}]`,rows:[...Array(D)].map((_,k)=>[`${k}`,q.h[k],q.u[k]]),aLbl:'h[i]',bLbl:`W[${nw}, i]`,res:q.score,kind:'key'})}</div>`+
+    TB(String.raw`\begin{aligned} ${sigTeX(q.score,'&=')} \\ L^{-} &= \ln\bigl(1 + e^{${n4(q.score)}}\bigr) = \ln(1 + ${n5(Math.exp(q.score))}) = \boxed{${n5(q.loss)}} \\ \delta &= \sigma(s) = \boxed{${n5(q.err)}} \end{aligned}`)+
+    `<h3>3 · Gradients and the update (η = ${LR})</h3>`+
+    dimTable([['h[i]',q.h],[`u[i] = W[${nw}, i]`,q.u],['δ × u[i]',q.gh],['δ × h[i]',q.gu],[`E[${cw}, i] after`,q.hA,n5,true],[`W[${nw}, i] after`,q.uA,n5,true]])+
+    TB(String.raw`\begin{aligned} E_{${tw(cw)}} &\leftarrow h - ${LR}\cdot ${n4(q.err)}\cdot u \\ W_{${tw(nw)}} &\leftarrow u - ${LR}\cdot ${n4(q.err)}\cdot h \\ s \text{ after both steps} &= ${n5(sA)} \quad (\text{was } ${n5(q.score)}) \end{aligned}`)+
+    callouts([`The score went down by ${n5(q.score-sA)}, so the model now says "yes" to ${nw} a little less: ${pct(q.sg)} → ${pct(sigmoid(sA))}.`,
+      RUN.order[0].some(([a,b])=>a===c&&b===q.n)?`${nw} really is a neighbour of ${cw} in another sentence, so this push is "wrong". That happens with random draws; the real pairs still win because each of them comes up every epoch.`:`${nw} never appears next to ${cw}, so "no" is the right answer and this push is helpful.`,
+      i<K-1?`Next: wrong word ${i+2}.`:`That was the last wrong word. This pair added ${K+1} loss terms: ${[pos.loss,...neg.map(q=>q.loss)].map(n4).join(' + ')} = ${n4(s.loss)}.`]);
+  }
+  switch(S.ph){
+  case "shuffle":{
+    const ord=RUN.order[S.ep];
+    return head("Shuffle","np.random.shuffle(pairs) · total_loss = 0")+
+    `<p class="explain">No arithmetic yet. The ${NP} pairs are put in a new random order, and <code>total_loss</code> goes back to 0. Here is the complete order this epoch will use:</p>
+    <div class="pairgrid">${ord.map(([a,b],i)=>`<span class="${i===0?'first':''}"><i>${i+1}</i> (${V[a]}, ${V[b]})</span>`).join('')}</div>
+    ${callouts([`Only the order changes. The same ${NP} pairs are used every epoch.`,`The shuffle and the wrong-word draws come from the same random stream seeded with 42, so the whole run is the same every time.`])}`;}
+  case "pair":
+    return head("Pick the pair","for center, context in pairs")+
+    `<div class="math">(center, context) = (${c}, ${x})
+center  = ${c}  → word_to_id["${cw}"]   → selects <span class="c-center">row ${c} of E</span>
+context = ${x}  → word_to_id["${xw}"]   → selects <span class="c-target">row ${x} of W</span></div>
+    ${callouts([`The two numbers are just indexes. ${c} picks which word's embedding to read, and ${x} picks which row of W to compare it with.`,`In chapter 01, ${x} picked one of ${NV} probabilities. Here it picks one of the ${K+1} words the model will check.`])}`;
+  case "h":
+    return head("Lookup: h = E[center], u = W[context]","lines 46–47",String.raw`h = E_{${c},:}\ (\text{${cw}}), \qquad u = W_{${x},:}\ (\text{${xw}})`)+
+    GL([[String.raw`E`,`the embeddings, one row per word (${NV}×${D}). The rows of E are what we keep at the end.`],[String.raw`W`,`the second table, also one row per word (${NV}×${D}). A word's row in W is used when it's the word being checked.`],[String.raw`h`,`${cw}'s row of E: <code>E[center].copy()</code>.`],[String.raw`u`,`${xw}'s row of W: <code>W[context].copy()</code>.`]])+
+    dimTable([[`h = E[${cw}, i]`,pos.h,n5,true],[`u = W[${xw}, i]`,pos.u,n5,true]])+
+    callouts([`<code>.copy()</code> matters: lines 51–52 change E[center] and W[context], and both updates need the values from before either change.`,
+      `In chapter 01 W was ${D}×${NV} (one column per word) and every column was used. Here W is stored as ${NV}×${D} so one word's vector is one row, and only ${K+1} rows are used per pair.`]);
+  case "pscore":
+    return head("score = h @ u, then σ(score)","line 48",String.raw`s = h\cdot u = \sum_{i=0}^{${D-1}} h_i\,u_i, \qquad \sigma(s) = \frac{1}{1+e^{-s}}`)+
+    GL([[String.raw`s`,`the score for the pair (${cw}, ${xw}): <code>score</code>.`],[String.raw`h_i,\ u_i`,`number i of h and of u.`],[String.raw`\sigma`,`the sigmoid. It turns any number into a value between 0 and 1: very negative → near 0, 0 → 0.5, very positive → near 1.`],[String.raw`\sigma(s)`,`the model's chance that ${xw} really is a neighbour of ${cw}.`]])+
+    `<h3>1 · The score</h3><div class="cards">${dotWork({title:`s = h · u`,rows:[...Array(D)].map((_,k)=>[`${k}`,pos.h[k],pos.u[k]]),aLbl:'h[i]',bLbl:'u[i]',res:pos.score,kind:'key'})}</div>`+
+    `<h3>2 · The sigmoid</h3>`+TB(String.raw`\sigma(s) = ${sigTeX(pos.score).replace(/^\\sigma\(.*?\) = /,'')}`)+
+    callouts([`The code doesn't store σ(score) on line 48; it's used inside the loss and the error. It's shown here because it's the model's actual answer.`,
+      String.raw`A useful fact for later: \(\sigma(-s) = 1 - \sigma(s)\). Flipping the sign of the score swaps "yes" and "no".`,
+      `Chapter 01 needed all ${NV} scores to get one probability (softmax). The sigmoid needs only this one score.`]);
+  case "ploss":
+    return head("total_loss += np.logaddexp(0, -score)","line 49",String.raw`L^{+} = -\ln\sigma(s) = \ln\bigl(1+e^{-s}\bigr)`)+
+    GL([[String.raw`L^{+}`,`the loss for the real pair. Lower is better; 0 means the model said "yes" with 100%.`],[String.raw`\sigma(s)`,`the chance of "yes" from line 48, here ${n5(pos.sg)}.`],[String.raw`\operatorname{logaddexp}(a,b)`,String.raw`NumPy's \(\ln(e^{a}+e^{b})\), computed without overflow.`],[String.raw`\ln`,`natural logarithm, <code>np.log</code>.`]])+
+    DV("1 · From −ln σ(s) to logaddexp(0, −score)",[
+      [String.raw`The right answer is "yes", so the loss is −ln of the chance of yes (the same idea as chapter 01's \(-\ln p_x\)):`,String.raw`L^{+} = -\ln\sigma(s) = -\ln\frac{1}{1+e^{-s}}`],
+      [String.raw`Use \(-\ln\frac{1}{a} = \ln a\):`,String.raw`L^{+} = \ln\bigl(1+e^{-s}\bigr)`],
+      [String.raw`Write 1 as \(e^{0}\). Then it's exactly \(\ln(e^{a}+e^{b})\) with \(a=0,\ b=-s\), which is what <code>np.logaddexp(0, -score)</code> computes. It gives the same number as <code>-np.log(sigmoid(score))</code>, but never takes the log of 0 when the score is very negative.`,String.raw`L^{+} = \ln\bigl(e^{0}+e^{-s}\bigr) = \operatorname{logaddexp}(0,\,-s)`]])+
+    TB(String.raw`\begin{aligned} L^{+} &= \ln\bigl(1 + e^{${n4(-pos.score)}}\bigr) = \ln(1 + ${n5(Math.exp(-pos.score))}) = \ln(${n5(1+Math.exp(-pos.score))}) = \boxed{${n5(pos.loss)}} \\ \text{check: } -\ln\sigma(s) &= -\ln(${n5(pos.sg)}) = ${n5(-Math.log(pos.sg))} \\[4pt] \text{total_loss} &= ${n4(s.runBefore)} + ${n4(pos.loss)} = ${n4(s.runBefore+pos.loss)} \end{aligned}`)+
+    callouts([`Reference points: σ = 1 → loss 0. σ = 0.5 (score 0) → loss ln 2 = 0.6931. That's why every term starts near 0.693 when the weights are tiny.`,
+      `The ${K} wrong words each add their own term on line 59, so the full loss for this pair is \\(L = L^{+} + \\sum_{k=1}^{${K}} L^{-}_k\\).`]);
+  case "perr":
+    return head("error = sigmoid(score) − 1","line 50",String.raw`\delta = \frac{\partial L^{+}}{\partial s} = \sigma(s) - 1, \qquad \nabla_h L^{+} = \delta\,u, \qquad \nabla_u L^{+} = \delta\,h`)+
+    GL([[String.raw`\delta`,`the error, <code>error</code> on line 50: how the loss reacts to a tiny nudge of the score.`],[String.raw`\sigma'(s)`,`the slope of the sigmoid at s.`],[String.raw`\nabla_h L^{+}`,`how the loss reacts to each number of h. Line 51 uses <code>error * u</code>.`],[String.raw`\nabla_u L^{+}`,`how the loss reacts to each number of u. Line 52 uses <code>error * h</code>.`]])+
+    DV("1 · The slope of the sigmoid",[
+      [String.raw`Write the sigmoid as a power so the chain rule applies:`,String.raw`\sigma(s) = \bigl(1+e^{-s}\bigr)^{-1}`],
+      [String.raw`Outer part: the derivative of \(g^{-1}\) is \(-g^{-2}\). Inner part: the derivative of \(1+e^{-s}\) is \(-e^{-s}\). Multiply them:`,String.raw`\sigma'(s) = -\bigl(1+e^{-s}\bigr)^{-2}\cdot\bigl(-e^{-s}\bigr) = \frac{e^{-s}}{\bigl(1+e^{-s}\bigr)^{2}}`],
+      [String.raw`Split it into two fractions. The first is \(\sigma(s)\), and the second is \(1-\sigma(s)\) (shown on the wrong-word step):`,String.raw`\sigma'(s) = \frac{1}{1+e^{-s}}\cdot\frac{e^{-s}}{1+e^{-s}} = \sigma(s)\,\bigl(1-\sigma(s)\bigr)`]])+
+    DV("2 · From the loss to the error",[
+      [String.raw`The loss is \(-\ln u\) with \(u = \sigma(s)\). The derivative of \(-\ln u\) is \(-\tfrac1u\) (derived in chapter 01). Chain rule:`,String.raw`\frac{\partial L^{+}}{\partial s} = -\frac{1}{\sigma(s)}\cdot\sigma'(s) = -\frac{1}{\sigma(s)}\cdot\sigma(s)\bigl(1-\sigma(s)\bigr) = -\bigl(1-\sigma(s)\bigr) = \boxed{\sigma(s)-1}`],
+      [String.raw`That's "chance given minus chance it should have been" (1 for a real pair), the same pattern as chapter 01's \(p - y\).`],
+      [String.raw`The score is \(s = \sum_i h_i u_i\). Nudging \(h_i\) changes s by \(u_i\), and nudging \(u_i\) changes it by \(h_i\). Chain rule once more:`,String.raw`\frac{\partial L^{+}}{\partial h_i} = \delta\,u_i, \qquad \frac{\partial L^{+}}{\partial u_i} = \delta\,h_i`]])+
+    TB(String.raw`\delta = \sigma(s) - 1 = ${n5(pos.sg)} - 1 = \boxed{${n5(pos.err)}}`)+
+    dimTable([['h[i]',pos.h],['u[i]',pos.u],['δ × u[i]  (for h)',pos.gh,n5,true],['δ × h[i]  (for u)',pos.gu,n5,true]])+
+    callouts([`δ is negative, so stepping against the gradient (lines 51–52 subtract it) <em>raises</em> the score: exactly what a real pair needs.`,
+      `In the full Python script for this chapter these two products are <code>gradient_h</code> and <code>gradient_u</code>. The listing here folds them into lines 51–52.`]);
+  case "pupd":{
+    const sA=dot(pos.hA,pos.uA);
+    return head("E[center] −= η·error·u,  W[context] −= η·error·h","lines 51–52",String.raw`E_{${tw(cw)}} \leftarrow h - \eta\,\delta\,u, \qquad W_{${tw(xw)}} \leftarrow u - \eta\,\delta\,h, \qquad \eta = ${LR}`)+
+    dimTable([[`E[${cw}, i] before`,pos.h],[`− ${LR} × ${n4(pos.err)} × u[i]`,pos.gh.map(v=>-LR*v)],[`E[${cw}, i] after`,pos.hA,n5,true],[`W[${xw}, i] before`,pos.u],[`− ${LR} × ${n4(pos.err)} × h[i]`,pos.gu.map(v=>-LR*v)],[`W[${xw}, i] after`,pos.uA,n5,true]])+
+    TB(String.raw`\begin{aligned} s \text{ before} &= ${n5(pos.score)}, & \sigma &= ${n5(pos.sg)} \\ s \text{ after} &= ${n5(sA)}, & \sigma &= ${n5(sigmoid(sA))} \end{aligned}`)+
+    callouts([`Since δ is negative, −η·δ = +${n4(-LR*pos.err)}: E[${cw}] moves toward u and W[${xw}] moves toward h. Both sides of the dot product moved toward each other.`,
+      `Only 2 rows changed (${2*D} numbers). Chapter 01's update touched all ${D*NV} numbers of W every step.`]);}
+  case "sample":{
+    const T=RUN.NT, lo=T.cdf.map((v,i)=>i?T.cdf[i-1]:0), raw=T.counts.map(v=>v/T.counts.reduce((a,b)=>a+b,0));
+    const big=T.counts.indexOf(Math.max(...T.counts)), small=T.counts.indexOf(Math.min(...T.counts));
+    const tab=rowTable(['word','count','count<sup>0.75</sup>','share of words','P (drawn as wrong word)','interval in [0, 1)'],V.map((w,j)=>({cls:j===x?'ctxrow':'',cells:[w+(j===x?' ★':''),String(T.counts[j]),n4(T.pw[j]),n4(raw[j]),n4(T.P[j]),`[${n4(lo[j])}, ${n4(T.cdf[j])})`],tdc:[,'','','',neg.some(q=>q.n===j)?'key':'','']})));
+    return head("sample_negatives(context, K)","lines 28–34, called on line 55",String.raw`P(w) = \frac{\text{count}(w)^{0.75}}{\sum_{v} \text{count}(v)^{0.75}}`)+
+    GL([[String.raw`\text{count}(w)`,`how many times word w appears in all the sentences.`],[String.raw`P(w)`,`the chance that one draw picks w: <code>neg_probs</code> on line 26.`],[String.raw`0.75`,`the power Word2Vec uses. Between 0 (every word equally likely) and 1 (exactly by frequency).`],[String.raw`K`,`how many wrong words to keep per real pair, here ${K}.`]])+
+    `<h3>1 · The table of chances</h3>`+tab+
+    TB(String.raw`\sum_v \text{count}(v)^{0.75} = ${n4(T.tot)}, \qquad P(\text{${V[big]}}) = \frac{${T.counts[big]}^{0.75}}{${n4(T.tot)}} = \frac{${n4(T.pw[big])}}{${n4(T.tot)}} = ${n4(T.P[big])}`)+
+    (T.counts[big]!==T.counts[small]?callouts([`${V[big]} appears ${T.counts[big]} times and ${V[small]} ${T.counts[small]} times, a ratio of ${(T.counts[big]/T.counts[small]).toFixed(2)}. After the 0.75 power the ratio of their chances is ${(T.P[big]/T.P[small]).toFixed(2)}: frequent words are still preferred, but less strongly.`]):'')+
+    `<h3>2 · This pair's draws</h3><p class="note">Each draw takes one random number between 0 and 1 and finds the interval it falls in (that's how <code>np.random.choice(..., p=neg_probs)</code> works). A draw that lands on the real context word (${xw}) is thrown away.</p>`+
+    rowTable(['draw','random number','falls in','word','kept?'],s.draws.map((d,i)=>({cls:d.w===x?'dim':'',cells:[String(i+1),d.u.toFixed(6),`[${n4(lo[d.w])}, ${n4(T.cdf[d.w])})`,V[d.w],d.w===x?'no: it is the context word':'yes'],tdc:[,'','','key','']})))+
+    callouts([`The wrong words for this pair: <b>${neg.map(q=>V[q.n]).join(', ')}</b>. The next ${K} steps handle them one by one.`,
+      `The draw happens after lines 51–52 in the code, but it only uses the random stream, so the result is the same whenever it runs.`]);}
+  case "end":{
+    const L=RUN.losses[S.ep];
+    return head("losses.append(total_loss / len(pairs))","",String.raw`\bar{L}_{\text{epoch ${S.ep+1}}} = \frac{1}{${NP}} \sum_{n=1}^{${NP}} \Bigl(L^{+}_n + \sum_{k=1}^{${K}} L^{-}_{n,k}\Bigr) = \frac{${n4(s.total)}}{${NP}} = ${n4(L)}`)+
+    (S.ep>0?TB(String.raw`\bar{L}_{${S.ep+1}} - \bar{L}_{${S.ep}} = ${n4(L)} - ${n4(RUN.losses[S.ep-1])} = ${n4(L-RUN.losses[S.ep-1])}`):'')+
+    TB(String.raw`\text{starting point: every score} \approx 0 \Rightarrow \text{every term} \approx \ln 2 \Rightarrow \bar{L} \approx (${K}+1)\ln 2 = ${n4((K+1)*Math.LN2)}`)+
+    callouts([`This number is one point on the loss chart below.`,`Unlike chapter 01 the loss bounces more from epoch to epoch, because the wrong words are drawn at random every time.`]);}
+  }
+}
+
+function takeaways(){
+  const L=RUN.losses, last=L[EPOCHS-1], base=(K+1)*Math.LN2;
+  const grp={};V.forEach(w=>{const g=CUR_GROUPS[w];if(g&&g!=='adj')(grp[g]??=[]).push(w)});
+  const gl=Object.values(grp).filter(a=>a.length>1);
+  const shareTxt=isFileCorpus(RUN.cfg)?'which is why cats, dogs and rabbits still end up together':gl.length?`which is why ${gl.map(a=>a.join(' and ')).join(', ')} end up close together`:'so they end up close together';
+  $('takeaways').innerHTML=`
+  <div class="panel"><h2>Why the loss starts near ${base.toFixed(2)}</h2><p>With tiny random weights every score is close to 0, and σ(0) = 0.5, so every yes/no question costs ln 2 = 0.693. Each real pair asks ${K+1} questions (1 real + ${K} wrong), so the starting loss is about ${K+1} × 0.693 = <span class="mono">${base.toFixed(4)}</span>. Epoch 1 averaged <span class="mono">${L[0].toFixed(4)}</span>.</p></div>
+  <div class="panel"><h2>It reached ${last.toFixed(3)} after ${EPOCHS} epoch${EPOCHS>1?'s':''}</h2><p>The loss can't reach 0: a word like <i>furry</i> has several real neighbours, and a randomly drawn "wrong" word is sometimes a real neighbour too. Each pair costs ${K+1} small dot products instead of ${NV}, which is the whole point: the cost doesn't grow with the vocabulary.</p></div>
+  <div class="panel"><h2>What each update does</h2><p>The real context word's row of <code>W</code> and the center word's row of <code>E</code> are pulled toward each other; ${K} randomly drawn rows of <code>W</code> are pushed away from it. Words that share neighbours get pulled toward the same rows, ${shareTxt}.</p></div>`;
+}
+// ---------- wiring ----------
+function readCfg(){
+  const num=(id,def,lo,hi,int)=>{let v=parseFloat($(id).value);if(!isFinite(v))v=def;v=clamp(v,lo,hi);if(int)v=Math.round(v);$(id).value=v;return v};
+  return {WINDOW:num('pWINDOW',1,1,3,true),D:num('pD',3,2,64,true),LR:num('pLR',0.05,0.001,5,false),EPOCHS:num('pEPOCHS',50,1,100,true),K:num('pK',3,1,10,true),CORPUS:parseText($('tCorpus').value)};
+}
+const parseText=t=>t.split('\n').map(s=>s.trim().split(/\s+/).filter(Boolean).join(' ')).filter(Boolean);
+// why a sentence list can't be trained on, or '' if it can
+function corpusProblem(lines,win){
+  if(!lines.length)return 'Add at least one sentence.';
+  const sents=lines.map(s=>s.toLowerCase().split(' ')), vocab=new Set(sents.flat());
+  if(!sents.some(s=>s.length>1))return 'Every sentence has one word, so there are no (center, context) pairs. Use sentences with at least 2 words.';
+  if(vocab.size<2)return 'Use at least 2 different words.';
+  if(vocab.size>60)return `That's ${vocab.size} different words. This page shows every word in every table, so it's limited to 60.`;
+  let np=0;for(const s of sents)for(let i=0;i<s.length;i++)np+=Math.min(s.length,i+win+1)-Math.max(0,i-win)-1;
+  if(np>2000)return `That makes ${np} pairs per epoch. The page is limited to 2000 so it stays quick.`;
+  return '';
+}
+function setRun(cfg){
+  RUN=train(cfg);NP=RUN.NP;D=cfg.D;LR=cfg.LR;EPOCHS=cfg.EPOCHS;K=cfg.K;stCache=-1;
+  const pr=presetForText(cfg.CORPUS);CUR_GROUPS=pr?.groups||DEF_GROUPS;CUR_LEGEND=pr?.legend||DEF_LEGEND;
+  const present=new Set(V.map(GROUP));
+  $('pcaLegend').innerHTML=["pets","fruit","veh","adj"].filter(g=>present.has(g)).map(g=>`<span><i style="background:${GCOL[g]}"></i>${present.size===1?'words':CUR_LEGEND[g]||'other words'}</span>`).join('');
+  $('dVocab').textContent=NV;
+  $('corpusInfo').className='cinfo';$('corpusInfo').textContent=`${SENTS.length} sentence${SENTS.length>1?'s':''} · ${NV} different words · ${NP} (center, context) pairs per epoch`;
+  $('tCorpus').classList.toggle('changed',!isFileCorpus(cfg));
+  drawPresets();
+  AXES=pcaAxes(RUN.finalE);
+  PSCALE=1.2*Math.max(0.05,...project(RUN.finalE).flat().map(Math.abs));
+  $('dPairs').textContent=NP;$('dUpd').textContent=NP*EPOCHS;
+  document.querySelectorAll('.pchip').forEach(el=>el.classList.toggle('changed',cfg[el.dataset.k]!==FILE[el.dataset.k]));
+  $('bReset').hidden=isFile(cfg);
+  $('runnote').innerHTML=isFile(cfg)?`These are the default sentences and values. The random seed is fixed at 42, so the same settings always give the same run.`:`<b>Changed from the default:</b> ${isFileCorpus(cfg)?'':'the sentences and '}the highlighted values. The random seed is still 42, so these settings always give the same run.`;
+  $('selEpoch').innerHTML=[...Array(EPOCHS)].map((_,i)=>`<option value="${i}">${i+1}</option>`).join('');
+  $('rngStep').max=NP-1;
+  $('chk50lbl').textContent=`show what epochs ${EPOCHS+1}–${RUN.losses.length} would do`;
+  $('chk50').parentElement.hidden=RUN.losses.length<=EPOCHS;
+  $('pcaNote').textContent=D===2?`normalized E (D = 2, so these are the two dimensions themselves, rotated)`:`normalized E, on the PCA axes of this run's final embeddings`;
+  drawCode();takeaways();typesetMath(['takeaways']);
+  S={ep:0,k:0,ph:"shuffle"};render();
+}
+// keep the running line visible inside the (scrollable) code panel
+function scrollCode(){
+  const on=document.querySelector('.ln.on'),src=$('src');if(!on||src.scrollHeight<=src.clientHeight)return;
+  const t=on.offsetTop-src.offsetTop;if(t<src.scrollTop+20||t>src.scrollTop+src.clientHeight-40)src.scrollTop=Math.max(0,t-src.clientHeight/3);
+}
+function render(){
+  document.querySelectorAll('.ln').forEach(el=>{const ph=el.dataset.ph;el.classList.toggle('on',!!ph&&lineOn(ph))});
+  const list=phasesFor(S.k), ci=list.indexOf(S.ph);
+  $('phases').innerHTML=list.map((p,i)=>`<button class="ph ${i<ci?'done':''} ${p===S.ph?'on':''}" data-p="${p}">${phLabel(p)}</button>`).join('');
+  $('stage').innerHTML=stageHTML();
+  scrollCode();
+  $('selEpoch').value=S.ep; $('rngStep').value=S.k; $('posTxt').textContent=`${S.k+1} / ${NP}`;
+  $('worked').innerHTML=workedHTML(); typesetMath(['worked']);
+  $('lossViz').innerHTML=lossChart(); $('pcaViz').innerHTML=pcaChart(); $('predViz').innerHTML=predTable();
+  savePos();
+}
+// ---------- hyperparameters: submit button, URL query params, persistence ----------
+const PIDS={WINDOW:'pWINDOW',D:'pD',LR:'pLR',EPOCHS:'pEPOCHS',K:'pK'}, QK={WINDOW:'window',D:'d',LR:'lr',EPOCHS:'epochs',K:'k'};
+function fillInputs(c){for(const k in PIDS)$(PIDS[k]).value=c[k];if(c.CORPUS)$('tCorpus').value=c.CORPUS.join('\n')}
+// one ready-made set is shown at a time; PI is the one on screen
+let PI=-1;
+const presetRunning=p=>RUN&&sameText(p.text,RUN.cfg.CORPUS)&&Object.keys(p.cfg).every(k=>p.cfg[k]===RUN.cfg[k]);
+function drawPresets(){
+  if(PI<0){PI=Math.max(0,PRESETS.findIndex(presetRunning))}
+  const p=PRESETS[PI], on=presetRunning(p);
+  $('presetList').innerHTML=`<div class="preset ${on?'on':''}" data-id="${p.id}"><b>${p.name}${on?' · running now':''}</b><span>${p.note}</span><span class="mono">WINDOW ${p.cfg.WINDOW} · D ${p.cfg.D} · LEARNING_RATE ${p.cfg.LR} · EPOCHS ${p.cfg.EPOCHS}</span></div>`;
+  $('pPos').textContent=`${PI+1} / ${PRESETS.length}`;
+  $('pUse').disabled=on;$('pUse').textContent=on?'This set is running':'Use this set';
+}
+// query value for the sentences: a preset id, or the sentences themselves
+const textQ=c=>{const p=presetForText(c.CORPUS);return p?(p.id==='file'||p.id==='fast'?null:p.id):c.CORPUS.join('\n')};
+function pending(){
+  // which inputs differ from the run on screen
+  let any=false;
+  for(const k in PIDS){const v=parseFloat($(PIDS[k]).value);const diff=!(v===RUN.cfg[k]);$(PIDS[k]).closest('.pchip').classList.toggle('pending',diff);any=any||diff}
+  const lines=parseText($('tCorpus').value), tdiff=!sameText(lines,RUN.cfg.CORPUS);
+  $('tCorpus').classList.toggle('pending',tdiff);any=any||tdiff;
+  const prob=tdiff||any?corpusProblem(lines,Math.round(parseFloat($('pWINDOW').value))||1):'';
+  if(prob){$('corpusInfo').className='cinfo err';$('corpusInfo').textContent=prob}
+  else if(tdiff){const s=lines.map(l=>l.toLowerCase().split(' ')),nv=new Set(s.flat()).size;$('corpusInfo').className='cinfo';$('corpusInfo').textContent=`${lines.length} sentences · ${nv} different words · press "Run with these values" to train on them`}
+  else{$('corpusInfo').className='cinfo';$('corpusInfo').textContent=`${SENTS.length} sentence${SENTS.length>1?'s':''} · ${NV} different words · ${NP} (center, context) pairs per epoch`}
+  $('bApply').hidden=!any;$('bApply').disabled=!!prob;
+}
+function saveCfg(c){
+  const q=cfgQuery(c);
+  writeURL(q);
+  try{isFile(c)?localStorage.removeItem('nscfg'):localStorage.setItem('nscfg',JSON.stringify(c))}catch(e){}
+}
+function cfgQuery(c){
+  const q=new URLSearchParams();if(isFile(c))return q;
+  for(const k in QK)q.set(QK[k],c[k]);
+  const t=textQ(c);if(t!=null)q.set(PRESETS.some(p=>p.id===t)?'corpus':'text',t);
+  return q;
+}
+function loadCfg(){
+  const c={...FILE};let found=false;
+  try{const q=new URLSearchParams(location.search);for(const k in QK)if(q.has(QK[k])){const v=parseFloat(q.get(QK[k]));if(isFinite(v)){c[k]=v;found=true}}
+    if(q.has('corpus')){const p=PRESETS.find(p=>p.id===q.get('corpus'));if(p){c.CORPUS=p.text;found=true}}
+    else if(q.has('text')){const t=parseText(q.get('text'));if(t.length){c.CORPUS=t;found=true}}}catch(e){}
+  if(!found){try{const s=JSON.parse(localStorage.getItem('nscfg')||'null');if(s){for(const k in QK)if(isFinite(s[k]))c[k]=s[k];if(Array.isArray(s.CORPUS)&&s.CORPUS.length)c.CORPUS=s.CORPUS}}catch(e){}}
+  if(corpusProblem(c.CORPUS,c.WINDOW))c.CORPUS=DEFAULT_CORPUS;
+  fillInputs(c);return readCfg();
+}
+function writeURL(q){
+  // q holds hyperparameters; position is appended so both survive a reload
+  if(RUN&&!(S.ep===0&&S.k===0&&S.ph==="shuffle")){q.set('epoch',S.ep+1);q.set('pair',S.k+1);q.set('line',S.ph)}
+  try{history.replaceState(null,'',location.pathname+(q.toString()?'?'+q:'')+location.hash)}catch(e){}
+}
+let BOOT=true; // don't overwrite the saved position while the page is still restoring it
+function savePos(){
+  if(BOOT)return;
+  const q=RUN?cfgQuery(RUN.cfg):new URLSearchParams();
+  writeURL(q);
+  try{localStorage.setItem('nspos',JSON.stringify({...S,cfg:RUN.cfg}))}catch(e){}
+}
+function loadPos(){
+  let p=null;
+  try{const q=new URLSearchParams(location.search);if(q.has('epoch'))p={ep:+q.get('epoch')-1,k:+q.get('pair')-1,ph:q.get('line')}}catch(e){}
+  if(!p){try{const s=JSON.parse(localStorage.getItem('nspos')||'null');if(s&&s.cfg&&JSON.stringify(s.cfg)===JSON.stringify(RUN.cfg))p=s}catch(e){}}
+  if(!p||!(p.ep>=0&&p.ep<EPOCHS&&p.k>=0&&p.k<NP))return;
+  S={ep:p.ep,k:p.k,ph:phasesFor(p.k).includes(p.ph)?p.ph:"pair"};render();
+}
+function apply(){stop();const c=readCfg();if(corpusProblem(c.CORPUS,c.WINDOW)){pending();return}saveCfg(c);setRun(c);pending()}
+Object.values(PIDS).forEach(id=>{$(id).addEventListener('input',pending);$(id).addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();apply()}})});
+$('bApply').onclick=apply;
+$('tCorpus').addEventListener('input',pending);
+$('tCorpus').addEventListener('keydown',e=>{if(e.key==='Enter'&&(e.metaKey||e.ctrlKey)){e.preventDefault();apply()}});
+$('pPrev').onclick=()=>{PI=(PI-1+PRESETS.length)%PRESETS.length;drawPresets()};
+$('pNext').onclick=()=>{PI=(PI+1)%PRESETS.length;drawPresets()};
+$('pUse').onclick=()=>{const p=PRESETS[PI];fillInputs({...p.cfg,CORPUS:p.text});apply()};
+$('bReset').onclick=()=>{fillInputs(FILE);apply()};
+$('bNext').onclick=()=>move(1);
+$('bPrev').onclick=()=>move(-1);
+$('bPair').onclick=()=>{if(S.k<NP-1){S.k++;S.ph="pair"}else if(S.ep<EPOCHS-1){S.ep++;S.k=0;S.ph="shuffle"}render()};
+$('selEpoch').onchange=e=>{S.ep=+e.target.value;if(!phasesFor(S.k).includes(S.ph))S.ph="pair";render()};
+$('rngStep').oninput=e=>{S.k=+e.target.value;if(!phasesFor(S.k).includes(S.ph))S.ph="pair";render()};
+$('phases').onclick=e=>{const b=e.target.closest('.ph');if(b){S.ph=b.dataset.p;render()}};
+$('src').onclick=e=>{const ln=e.target.closest('.ln');if(!ln||!ln.dataset.ph)return;let p=ln.dataset.ph;if(p==="pca"){$('pcaViz').scrollIntoView({behavior:'smooth',block:'center'});return}if(p==="epoch")p="shuffle";if(p==="neg")p="neg0";
+  if(p==="shuffle")S.k=0; if(p==="end")S.k=NP-1; S.ph=p;render()};
+$('chk50').onchange=()=>{$('lossViz').innerHTML=lossChart()};
+let timer=null;
+function stop(){if(timer){clearInterval(timer);timer=null;$('bPlay').textContent='Play'}}
+$('bPlay').onclick=()=>{if(timer){stop();return}
+  $('bPlay').textContent='Pause';timer=setInterval(()=>{if(!move(1))stop()},900)};
+document.addEventListener('keydown',e=>{if(e.target.matches('input,select,textarea'))return;
+  if(e.key==='ArrowRight'){e.preventDefault();e.shiftKey?$('bPair').click():move(1)}
+  else if(e.key==='ArrowLeft'){e.preventDefault();move(-1)}
+  else if(e.key===' '){e.preventDefault();$('bPlay').click()}});
+// the code card takes the height of the step card next to it and scrolls inside
+new ResizeObserver(()=>{document.querySelector('.code').style.setProperty('--bench-h',document.querySelector('.bench').offsetHeight+'px');scrollCode()}).observe(document.querySelector('.bench'));
+setRun(loadCfg());loadPos();BOOT=false;savePos();pending();
+$('bRestart').onclick=()=>{stop();S={ep:0,k:0,ph:"shuffle"};render()};
+// light/dark switch; with no saved choice the page follows the system setting
+const isDark=()=>{const t=document.documentElement.dataset.theme;return t?t==='dark':matchMedia('(prefers-color-scheme: dark)').matches};
+const themeLabel=()=>{$('bTheme').textContent=isDark()?'Light':'Dark'};
+try{const t=localStorage.getItem('w2vtheme');if(t)document.documentElement.dataset.theme=t}catch(e){}
+themeLabel();
+$('bTheme').onclick=()=>{const t=isDark()?'light':'dark';document.documentElement.dataset.theme=t;try{localStorage.setItem('w2vtheme',t)}catch(e){}themeLabel()};
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change',themeLabel);
+</script>
+
+</body>
+</html>

@@ -42,6 +42,7 @@
   --g-pets:#4fc095; --g-fruit:#f19a52; --g-veh:#a594f0; --g-adj:#7d8a98;
   --hl:#3a3218; --hl-edge:#b8902a; --ink-band:#0b0f14; --ink-band-fg:#e6ebf1; color-scheme:dark}
 *{box-sizing:border-box}
+[hidden]{display:none!important}
 html{scroll-behavior:smooth;scroll-padding-top:16px}
 @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
 body{background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:16px;line-height:1.6;-webkit-font-smoothing:antialiased}
@@ -279,6 +280,7 @@ svg .axis{stroke:var(--line)}
 .gloss>.gs:nth-child(4n){border-left:1px solid var(--border,rgba(127,127,127,.25))}
 @media (max-width:760px){.gloss{grid-template-columns:auto 1fr}.gloss>.gs:nth-child(4n){border-left:0}}
 .callouts mjx-container{color:var(--fg)}
+.nav a.home{color:var(--fg);font-weight:600;padding-right:14px;border-right:1px solid var(--line)}
 .settings{display:flex;flex-direction:column;gap:10px}
 .phelp{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,230px),1fr));gap:6px 20px;margin:0;font-size:14px}
 .phelp>div{display:flex;flex-direction:column;gap:1px}
@@ -300,7 +302,7 @@ function typesetMath(ids=['worked','takeaways','pcaSec','intro']){const els=ids.
   <div class="topbar">
     <a class="brand" href="#top" id="top"><svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true"><rect x="1" y="9" width="7" height="8" rx="1.5" fill="none" stroke="var(--target)" stroke-width="2"/><rect x="10" y="9" width="7" height="8" rx="1.5" fill="var(--center)"/><rect x="19" y="9" width="6" height="8" rx="1.5" fill="none" stroke="var(--target)" stroke-width="2"/></svg>Word2Vec, step by step</a>
     <nav class="nav" aria-label="Sections">
-      <a href="#s-idea">Key terms</a><a href="#s-setup">Sentences</a><a href="#s-step">Training loop</a><a href="#s-math">Math</a><a href="#s-run">Whole run</a><a href="#s-pca">PCA</a>
+      <a href="../" class="home">← All chapters</a><a href="#s-idea">Key terms</a><a href="#s-setup">Sentences</a><a href="#s-step">Training loop</a><a href="#s-math">Math</a><a href="#s-run">Whole run</a><a href="#s-pca">PCA</a>
       <button class="theme-btn" id="bTheme" type="button" aria-label="Switch light or dark theme">Dark</button>
     </nav>
   </div>

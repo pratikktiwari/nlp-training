@@ -11,8 +11,8 @@ A step-by-step path from word embeddings to GPT-2, built from scratch. Each chap
 | # | Chapter | What it adds | Status |
 |---|---|---|---|
 | 01 | [Word2Vec: skip-gram](chapters/01-word2vec-skipgram/) | embeddings, softmax, cross-entropy, backprop by hand | ✅ code · ✅ viz · ✅ notes |
-| 02 | Negative sampling | why full softmax is slow; sigmoid plus k "wrong" words | planned |
-| 03 | Bigram language model | the first model that predicts the next token | planned |
+| 02 | [Negative sampling](chapters/02-negative-sampling/) | why full softmax is slow; sigmoid plus k "wrong" words | ✅ code · ✅ viz · notes next |
+<!-- | 03 | Bigram language model | the first model that predicts the next token | planned |
 | 04 | MLP language model | a context window, batches, train/validation split | planned |
 | 05 | RNN language model | a hidden state carried through time; backprop through time | planned |
 | 06 | LSTM and GRU | gates that keep gradients from vanishing (switch to PyTorch) | planned |
@@ -22,7 +22,7 @@ A step-by-step path from word embeddings to GPT-2, built from scratch. Each chap
 | 10 | BPE tokenizer | byte-pair encoding, the tokenizer GPT-2 uses | planned |
 | 11 | Mini GPT | a small character-level GPT | planned |
 | 12 | GPT-2 (124M) | reproduce GPT-2 small and compare with OpenAI's weights | planned |
-| 13+ | Beyond | fine-tuning, LoRA, KV cache, sampling, RLHF/DPO | planned |
+| 13+ | Beyond | fine-tuning, LoRA, KV cache, sampling, RLHF/DPO | planned | -->
 
 ## Layout
 
