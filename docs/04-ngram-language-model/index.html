@@ -1,0 +1,501 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>N-gram Language Model: Math and NumPy Code, Step by Step</title>
+<meta name="description" content="Follow one update of a neural n-gram language model with every number shown: embedding lookup, joining, scores, softmax, cross-entropy, gradients and the weight update.">
+<script src="../theme.js"></script>
+<link rel="stylesheet" href="../theme.css">
+<link rel="stylesheet" href="../intuition.css">
+<link rel="stylesheet" href="ngram.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,600&family=Source+Sans+3:wght@400;600&family=JetBrains+Mono:wght@400&display=swap">
+<script>window.MathJax = { tex: { inlineMath: [['\\(', '\\)']] }, svg: { fontCache: 'global' } };</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg.js" async></script>
+<script src="ngram-engine.js" defer></script>
+<script src="ngram.js" defer></script>
+</head>
+<body data-view="math">
+<main class="wrap">
+  <div class="topbar"><a href="../">All chapters</a>
+    <nav aria-label="Chapter navigation"><a href="intuition.html">N-gram intuition</a><a href="../03-glove/">Chapter 03</a><a href="#step-heading">One update</a><a href="#math-heading">Formulas</a><button id="bTheme" class="theme-btn" type="button">Dark mode</button></nav>
+  </div>
+  <header>
+    <span class="kicker">Chapter 04 / N-gram language model / Math &amp; code</span>
+    <h1>One update of the neural n-gram model, every number shown</h1>
+    <p class="lede">Pick a window, then step through the same lines the Python script runs: look up, join, score, softmax, loss, gradients, update.</p>
+    <p>Read the <a href="intuition.html">intuition page</a> first for why we do this. To keep every matrix small enough to print, this page uses 10 sentences, 21 words, n = 3 and D = 2. The script uses WikiText-2, 10,000 words and D = 64, with exactly the same code.</p>
+  </header>
+  <p id="loadError" class="error" role="alert" hidden></p>
+  <noscript><p class="error">Enable JavaScript for the worked numbers. The formulas below still read without it.</p></noscript>
+
+  <section aria-labelledby="data-heading">
+    <h2 id="data-heading">1. The training windows</h2>
+    <p class="prose">Every sentence ends with <code>&lt;eos&gt;</code>, and all sentences are joined into one long list of word IDs. The IDs are sorted by how often the word appears, so ID 0 is the most common word. With n = 3, each window gives two context IDs and one target ID.</p>
+    <div class="duo">
+      <div class="panel"><h3>Vocabulary (V = <span id="vocabSize"></span>)</h3><div id="vocabTable" class="scroll" tabindex="0" role="region" aria-label="Vocabulary with IDs"></div></div>
+      <div class="panel"><h3>Choose the window to train on</h3><div id="windowList" class="window-list" role="listbox" aria-label="Training windows"></div><p class="note">There are <span id="windowCount"></span> windows. The script trains on batches of 512 windows at a time; here a batch is 1 window, so every number fits on screen. With a batch, the same gradients are averaged over the batch.</p></div>
+    </div>
+  </section>
+
+  <section aria-labelledby="step-heading">
+    <h2 id="step-heading">2. Step through one update</h2>
+    <div class="controls"><button id="prevPhase" type="button">← Previous step</button><button id="nextPhase" type="button" class="primary">Next step →</button><button id="applyUpdate" type="button">Apply this update and pick the next window</button><button id="resetModel" type="button">Back to random start</button></div>
+    <div id="phases" class="phase-list" aria-label="Steps of one update"></div>
+    <p id="modelStatus" class="note" role="status"></p>
+    <div class="stage-layout">
+      <div class="panel source-panel"><h3>ngram-language-model.py</h3>
+        <p class="note">The highlighted lines are the current step. Click a line group to jump to its step.</p>
+        <div id="codeSource" class="scroll" tabindex="0" role="region" aria-label="Scrollable Python source"></div>
+      </div>
+      <div class="panel">
+        <h3 id="phaseTitle"></h3>
+        <p id="phaseWhy" class="explanation"></p>
+        <div id="phaseWork"></div>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="math-heading">
+    <h2 id="math-heading">3. The same steps as formulas</h2>
+    <div class="prose">
+      <p><b>Symbols.</b> \(V\) is the number of words, \(D\) the numbers per embedding, \(C = n-1\) the number of context words. \(E\) is the \(V \times D\) embedding table, \(W\) is the \(CD \times V\) output table, and \(b\) holds one starting score per word. \(w_1, \dots, w_C\) are the context word IDs and \(t\) is the target ID.</p>
+      <h3>Forward: from context words to probabilities</h3>
+      <p>Join the context embeddings end to end into one list of \(CD\) numbers:</p>
+      $$x = [\,E_{w_1},\ E_{w_2},\ \dots,\ E_{w_C}\,]$$
+      <p>Score every word. Score \(v\) multiplies each number of \(x\) by column \(v\) of \(W\), adds the products, and adds word \(v\)'s starting score:</p>
+      $$s_v = \sum_{i=1}^{CD} x_i\,W_{i,v} + b_v$$
+      <p>Softmax turns the \(V\) scores into probabilities that add up to 1, and the loss is minus the log of the target's probability:</p>
+      $$p_v = \frac{e^{s_v}}{\sum_{u=1}^{V} e^{s_u}} \qquad L = -\ln p_t$$
+      <h3>Backward: how the loss changes with each number</h3>
+      <p>The derivative of the loss with respect to each score is “probability minus 1 for the target, probability minus 0 for every other word”. Chapter 01 derives this step by step; it is the same softmax and cross-entropy.</p>
+      $$\frac{\partial L}{\partial s_v} = p_v - [v = t] \;=\; g_v$$
+      <p>Each score is a sum of \(x_i W_{i,v}\) plus \(b_v\). So changing \(W_{i,v}\) changes \(s_v\) by \(x_i\) per unit, changing \(b_v\) changes it one-for-one, and changing \(x_i\) changes every score \(s_v\) by \(W_{i,v}\):</p>
+      $$\frac{\partial L}{\partial W_{i,v}} = x_i\, g_v \qquad \frac{\partial L}{\partial b_v} = g_v \qquad \frac{\partial L}{\partial x_i} = \sum_{v=1}^{V} W_{i,v}\, g_v$$
+      <p>\(x\) was built by copying rows of \(E\). Numbers 1 to \(D\) of \(x\) came from \(E_{w_1}\), numbers \(D+1\) to \(2D\) from \(E_{w_2}\), and so on. So the gradient of \(x\) is cut into \(C\) pieces of \(D\) numbers, and each piece is the gradient for its word's row of \(E\). If the same word appears twice in the context, both pieces are added to its row.</p>
+      <h3>Update: step against every gradient</h3>
+      $$W \leftarrow W - \eta\,\frac{\partial L}{\partial W} \qquad b \leftarrow b - \eta\,\frac{\partial L}{\partial b} \qquad E_{w_c} \leftarrow E_{w_c} - \eta\,\frac{\partial L}{\partial x}\Big|_{\text{piece } c}$$
+      <p>\(\eta\) is the learning rate. With a batch of \(B\) windows, the script averages: \(L\) is the mean loss, so every \(g_v\) is divided by \(B\) before the gradients are summed over the batch.</p>
+    </div>
+  </section>
+
+  <section aria-labelledby="run-heading">
+    <h2 id="run-heading">4. Repeat for every window</h2>
+    <p class="prose">One <b>epoch</b> shuffles all windows and trains on them in batches of <span id="batchSize"></span>, with learning rate <span id="learningRate"></span>. The loss is the average over the epoch. Accuracy checks every window: is the word with the highest probability the real next word?</p>
+    <div class="controls"><button id="train1" type="button">Train 1 epoch</button><button id="train50" type="button" class="primary">Train 50 epochs</button><button id="trainReset" type="button">Back to random start</button></div>
+    <div class="duo">
+      <div class="panel"><h3>Average loss per epoch</h3><div id="lossPlot" class="scroll plot" tabindex="0" role="region" aria-label="Loss chart"></div><p id="lossReading" class="note"></p></div>
+      <div class="panel"><h3>What the model predicts now</h3><div id="trainedSummary"></div></div>
+    </div>
+    <div class="prose">
+      <h3>Why the loss does not reach 0</h3>
+      <p>After <code>on the</code>, the text continues with <code>mat</code>, <code>rug</code> and <code>tree</code>, one time each. The best any model can do for that context is give each about 1/3, which still costs \(-\ln(1/3) \approx 1.10\) every time. Contexts with only one possible next word can reach a loss near 0; ambiguous ones cannot.</p>
+    </div>
+  </section>
+
+  <section aria-labelledby="script-heading">
+    <h2 id="script-heading">5. What the Python script adds</h2>
+    <div class="prose">
+      <ul>
+        <li><b>Real data.</b> It downloads WikiText-2 (Wikipedia articles) once into <code>data/</code>, keeps the 9,999 most common words and replaces the rest with <code>&lt;unk&gt;</code>.</li>
+        <li><b>Batches.</b> It trains on 512 windows at once with matrix products, which is much faster in NumPy than one window at a time.</li>
+        <li><b>Count model next to it.</b> The same windows train the count model, so both are scored on the same test text.</li>
+        <li><b>Several n.</b> It repeats everything for n = 2, 3 and 4, times each training, and writes 60-word texts to <code>generated-text.md</code>.</li>
+      </ul>
+    </div>
+    <p class="takeaway">The neural n-gram model is chapter 01's network with one change: the input is n − 1 joined embeddings instead of one, and the target is the next word instead of a neighbour.</p>
+  </section>
+  <footer><p><a href="intuition.html">N-gram intuition</a> · <a href="../03-glove/">Previous chapter</a> · <a href="../">All chapters</a></p></footer>
+</main>
+<pre id="pySource" hidden>
+"""Chapter 04: an n-gram language model from scratch with NumPy.
+
+Both models read the previous n-1 words and predict the next word:
+1. Count model: remember which word came next most often after each context.
+2. Neural model: look up an embedding for each context word, join them, score every
+   vocabulary word with one linear layer, and turn the scores into probabilities with softmax.
+   Gradients are written by hand, like chapters 01 and 02.
+
+Run:  python chapters/04-ngram-language-model/ngram-language-model.py
+"""
+
+import argparse
+from collections import Counter, defaultdict
+import json
+from pathlib import Path
+import time
+import urllib.request
+
+import numpy as np
+
+
+CHAPTER_DIR = Path(__file__).resolve().parent
+DATA_DIR = CHAPTER_DIR / "data"
+# WikiText-2: about 2 million words of Wikipedia articles, already split into words.
+# The PyTorch examples repository keeps a copy that we download once into data/.
+DATA_URL = "https://raw.githubusercontent.com/pytorch/examples/main/word_language_model/data/wikitext-2/{split}.txt"
+
+VOCAB_SIZE = 10_000      # the 9,999 most common training words, plus &lt;unk&gt; for every other word
+N_VALUES = (2, 3, 4)     # n = 2 reads 1 previous word, n = 3 reads 2, n = 4 reads 3
+D = 64                   # numbers per word embedding
+LEARNING_RATE = 4.0     # large because each step averages the gradient over a whole batch
+BATCH_SIZE = 512
+EPOCHS = 1              # one pass over 2 million windows; more epochs help but take minutes each
+GENERATE_WORDS = 60
+PROMPTS = ["the game was", "in the first season of the", "the city is located"]
+SEED = 42
+
+
+# ---------- 1. Load the text ----------
+
+def download_wikitext() -&gt; None:
+    DATA_DIR.mkdir(exist_ok=True)
+    for split in ("train", "valid", "test"):
+        path = DATA_DIR / f"wiki.{split}.txt"
+        if not path.exists():
+            print(f"Downloading {split} split to {path} ...")
+            urllib.request.urlretrieve(DATA_URL.format(split=split), path)
+
+
+def read_tokens(path: Path) -&gt; list[str]:
+    """One long list of lowercase words. Each paragraph ends with &lt;eos&gt; ("end of sentence")."""
+    tokens = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        # skip blank lines and article headings such as "= Valkyria Chronicles III ="
+        if not line or line.startswith("="):
+            continue
+        tokens.extend(line.lower().split())
+        tokens.append("&lt;eos&gt;")
+    return tokens
+
+
+def build_vocab(train_tokens: list[str], size: int) -&gt; list[str]:
+    counts = Counter(train_tokens)
+    counts.pop("&lt;unk&gt;", None)  # WikiText already uses &lt;unk&gt; for rare words; we keep it as the last ID
+    return [word for word, _ in counts.most_common(size - 1)] + ["&lt;unk&gt;"]
+
+
+def to_ids(tokens: list[str], word_to_id: dict[str, int]) -&gt; np.ndarray:
+    unk = word_to_id["&lt;unk&gt;"]
+    return np.array([word_to_id.get(word, unk) for word in tokens], dtype=np.int64)
+
+
+def make_windows(ids: np.ndarray, n: int) -&gt; tuple[np.ndarray, np.ndarray]:
+    """Slide a window of n words along the text.
+
+    The first n-1 words of each window are the context; the last word is the target.
+    For "the cat sat on" and n = 3: (the, cat) -&gt; sat, (cat, sat) -&gt; on.
+    """
+    windows = np.lib.stride_tricks.sliding_window_view(ids, n)
+    return windows[:, :-1], windows[:, -1]
+
+
+# ---------- 2. Count model ----------
+
+def train_count_model(contexts: np.ndarray, targets: np.ndarray) -&gt; list[dict[tuple, int]]:
+    """For every context length k = n-1, ..., 1, 0, remember the most common next word.
+
+    best[k][last k context words] = the word seen most often right after them.
+    Shorter contexts are the fallback for contexts that never appear in training.
+    """
+    context_length = contexts.shape[1]
+    best = []
+    for k in range(context_length + 1):
+        # count every (context, next word) combination; k = 0 keeps no context, which is plain word frequency
+        shortened = map(tuple, contexts[:, context_length - k:].tolist())
+        ngram_counts = Counter(zip(shortened, targets.tolist()))
+        best_count: dict[tuple, int] = {}
+        best_word: dict[tuple, int] = {}
+        for (context, word), count in ngram_counts.items():
+            if count &gt; best_count.get(context, 0):
+                best_count[context] = count
+                best_word[context] = word
+        best.append(best_word)
+    return best
+
+
+def count_predict(best: list[dict[tuple, int]], context: list[int]) -&gt; tuple[int, int]:
+    """Return (predicted word ID, number of context words actually used)."""
+    for k in range(len(context), -1, -1):
+        key = tuple(context[len(context) - k:])
+        if key in best[k]:
+            return best[k][key], k
+    raise RuntimeError("The empty context is always in the table.")
+
+
+def count_accuracy(best: list[dict[tuple, int]], contexts: np.ndarray, targets: np.ndarray) -&gt; tuple[float, float]:
+    """Return (accuracy, share of windows whose full context was seen in training)."""
+    correct = 0
+    full_context_seen = 0
+    for context, target in zip(contexts.tolist(), targets.tolist()):
+        prediction, used = count_predict(best, context)
+        correct += prediction == target
+        full_context_seen += used == len(context)
+    return correct / len(targets), full_context_seen / len(targets)
+
+
+def count_probabilities(train_contexts: np.ndarray, train_targets: np.ndarray, context: list[int],
+                        vocab_size: int, unk_id: int) -&gt; np.ndarray:
+    """Find every place in the training text where `context` appears and count the word after it.
+
+    If the context never appears (or only &lt;unk&gt; follows it), drop its first word and search again.
+    """
+    context_length = train_contexts.shape[1]
+    for k in range(len(context), -1, -1):
+        matches = np.all(train_contexts[:, context_length - k:] == context[len(context) - k:], axis=1)
+        counts = np.bincount(train_targets[matches], minlength=vocab_size).astype(np.float64)
+        counts[unk_id] = 0
+        if counts.sum() &gt; 0:
+            return counts / counts.sum()
+    raise RuntimeError("The training text has no words besides &lt;unk&gt;.")
+
+
+# ---------- 3. Neural model ----------
+
+def init_neural_model(vocab_size: int, n: int, rng: np.random.Generator) -&gt; dict[str, np.ndarray]:
+    context_length = n - 1
+    return {
+        # E: one row of D numbers per word (the same idea as chapter 01's E)
+        "E": (rng.standard_normal((vocab_size, D)) * 0.1).astype(np.float32),
+        # W: one column per vocabulary word; it reads all n-1 embeddings joined end to end
+        "W": (rng.standard_normal((context_length * D, vocab_size)) * 0.1).astype(np.float32),
+        # b: one starting score per vocabulary word, so common words can score high in any context
+        "b": np.zeros(vocab_size, dtype=np.float32),
+    }
+
+
+def forward(model: dict[str, np.ndarray], contexts: np.ndarray) -&gt; tuple[np.ndarray, np.ndarray]:
+    batch_size, context_length = contexts.shape
+    # look up every context word's embedding, then join them: (B, n-1, D) -&gt; (B, (n-1)*D)
+    x = model["E"][contexts].reshape(batch_size, context_length * D)
+    scores = x @ model["W"] + model["b"]
+    return x, scores
+
+
+def softmax(scores: np.ndarray) -&gt; np.ndarray:
+    # subtracting each row's largest score changes nothing mathematically but keeps np.exp from overflowing
+    shifted = scores - scores.max(axis=1, keepdims=True)
+    exp_scores = np.exp(shifted)
+    return exp_scores / exp_scores.sum(axis=1, keepdims=True)
+
+
+def train_step(model: dict[str, np.ndarray], contexts: np.ndarray, targets: np.ndarray, learning_rate: float) -&gt; float:
+    batch_size, context_length = contexts.shape
+    rows = np.arange(batch_size)
+
+    # forward pass
+    x, scores = forward(model, contexts)
+    probabilities = softmax(scores)
+    loss = -np.log(probabilities[rows, targets] + 1e-12).mean()
+
+    # backward pass: d(loss)/d(scores) = probabilities - one_hot(target), averaged over the batch
+    d_scores = probabilities
+    d_scores[rows, targets] -= 1.0
+    d_scores /= batch_size
+    d_W = x.T @ d_scores
+    d_b = d_scores.sum(axis=0)
+    d_x = d_scores @ model["W"].T  # uses W from before the update
+
+    # update: subtract learning rate x gradient
+    model["W"] -= learning_rate * d_W
+    model["b"] -= learning_rate * d_b
+    # split d_x back into one D-sized piece per context word and update those rows of E.
+    # np.add.at adds correctly when the same word appears twice in a batch.
+    np.add.at(model["E"], contexts, -learning_rate * d_x.reshape(batch_size, context_length, D))
+    return float(loss)
+
+
+def neural_evaluate(model: dict[str, np.ndarray], contexts: np.ndarray, targets: np.ndarray) -&gt; tuple[float, float]:
+    """Return (accuracy, average loss) without changing the model."""
+    correct, total_loss = 0, 0.0
+    for start in range(0, len(targets), 4096):
+        batch_contexts = contexts[start:start + 4096]
+        batch_targets = targets[start:start + 4096]
+        _, scores = forward(model, batch_contexts)
+        probabilities = softmax(scores)
+        correct += int((scores.argmax(axis=1) == batch_targets).sum())
+        total_loss += float(-np.log(probabilities[np.arange(len(batch_targets)), batch_targets] + 1e-12).sum())
+    return correct / len(targets), total_loss / len(targets)
+
+
+def train_neural_model(train_contexts, train_targets, valid_contexts, valid_targets, vocab_size, n, report):
+    rng = np.random.default_rng(SEED)
+    model = init_neural_model(vocab_size, n, rng)
+    losses = []
+    for epoch in range(EPOCHS):
+        order = rng.permutation(len(train_targets))
+        total_loss = 0.0
+        for start in range(0, len(order), BATCH_SIZE):
+            batch = order[start:start + BATCH_SIZE]
+            total_loss += train_step(model, train_contexts[batch], train_targets[batch], LEARNING_RATE) * len(batch)
+        losses.append(total_loss / len(order))
+        valid_accuracy, valid_loss = neural_evaluate(model, valid_contexts, valid_targets)
+        report(f"  epoch {epoch + 1}/{EPOCHS}: train loss {losses[-1]:.3f}, "
+               f"validation loss {valid_loss:.3f}, validation accuracy {valid_accuracy:.2%}")
+    return model, losses
+
+
+# ---------- 4. Generate text ----------
+
+def generate(next_word_probabilities, prompt_ids: list[int], context_length: int,
+             words: int, rng: np.random.Generator | None) -&gt; list[int]:
+    """Repeat: read the last n-1 words, pick the next word, append it, slide the window.
+
+    rng = None picks the most likely word every time (greedy).
+    Otherwise draw the next word at random in proportion to its probability (sampling).
+    """
+    text = list(prompt_ids)
+    for _ in range(words):
+        probabilities = next_word_probabilities(text[-context_length:])
+        if rng is None:
+            text.append(int(probabilities.argmax()))
+        else:
+            text.append(int(rng.choice(len(probabilities), p=probabilities)))
+    return text
+
+
+def neural_probabilities(model: dict[str, np.ndarray], context: list[int], unk_id: int) -&gt; np.ndarray:
+    _, scores = forward(model, np.array([context]))
+    probabilities = softmax(scores.astype(np.float64))[0]
+    # never write &lt;unk&gt;: it stands for "some rare word", not a real word
+    probabilities[unk_id] = 0
+    return probabilities / probabilities.sum()
+
+
+def detokenize(words: list[str]) -&gt; str:
+    """Join words back into readable text: &lt;eos&gt; becomes a paragraph break, and WikiText's
+    split-up marks such as "1 @,@ 000" and "well @-@ known" are glued back together."""
+    text = (" ".join(words) + " ").replace(" &lt;eos&gt; ", "\n\n").replace(" @-@ ", "-").replace(" @,@ ", ",").replace(" @.@ ", ".").strip()
+    for mark in (" ,", " .", " ;", " :", " 's", " )", " n't"):
+        text = text.replace(mark, mark.strip() if mark[1] in ",.;:)" else mark[1:])
+    return text.replace("( ", "(")
+
+
+def write_generated_text(samples: list[dict], vocab_size: int) -&gt; None:
+    """Save every generated paragraph to generated-text.md, grouped by n and prompt."""
+    lines = ["# Generated text", "",
+             f"Written by `ngram-language-model.py`: WikiText-2, vocabulary {vocab_size:,}, D = {D}, "
+             f"{EPOCHS} epoch{'s' if EPOCHS &gt; 1 else ''}, seed {SEED}.",
+             f"Each text continues the prompt for {GENERATE_WORDS} words. Greedy always takes the most likely word; "
+             "sampled draws a word at random by its probability. ¶ marks the end of a paragraph.", ""]
+    for n in N_VALUES:
+        lines += [f"## n = {n}: reads {n - 1} previous word{'s' if n &gt; 2 else ''}", ""]
+        for prompt in PROMPTS:
+            lines += [f"### Prompt: \"{prompt}\"", ""]
+            for sample in samples:
+                if sample["n"] == n and sample["prompt"] == prompt:
+                    lines += [f"**{sample['model']}, {sample['method']}:** " + sample["text"].replace("\n\n", " ¶ "), ""]
+    (CHAPTER_DIR / "generated-text.md").write_text("\n".join(lines), encoding="utf-8")
+
+
+# ---------- 5. Run everything ----------
+
+def create_output_file() -&gt; Path:
+    run_id = 1
+    while True:
+        path = CHAPTER_DIR / f"ngram-language-model.output_{run_id}.txt"
+        try:
+            with path.open("x", encoding="utf-8"):
+                pass
+        except FileExistsError:
+            run_id += 1
+        else:
+            return path
+
+
+def main() -&gt; None:
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--export-web", action="store_true", help="also write results.json for the chapter's web page")
+    args = parser.parse_args()
+    output_file = create_output_file()
+
+    def report(*values: object) -&gt; None:
+        print(*values)
+        with output_file.open("a", encoding="utf-8") as handle:
+            print(*values, file=handle)
+
+    download_wikitext()
+    train_tokens = read_tokens(DATA_DIR / "wiki.train.txt")
+    valid_tokens = read_tokens(DATA_DIR / "wiki.valid.txt")
+    test_tokens = read_tokens(DATA_DIR / "wiki.test.txt")
+    vocab = build_vocab(train_tokens, VOCAB_SIZE)
+    word_to_id = {word: i for i, word in enumerate(vocab)}
+    unk_id = word_to_id["&lt;unk&gt;"]
+    train_ids, valid_ids, test_ids = (to_ids(t, word_to_id) for t in (train_tokens, valid_tokens, test_tokens))
+
+    report(f"Words: train {len(train_ids):,}, validation {len(valid_ids):,}, test {len(test_ids):,}")
+    report(f"Vocabulary: {len(vocab):,} words; {np.mean(test_ids == unk_id):.1%} of test words are &lt;unk&gt;")
+    report("First 30 training words:", " ".join(train_tokens[:30]))
+
+    results = []
+    samples = []
+    for n in N_VALUES:
+        report(f"\n===== n = {n}: read {n - 1} previous word{'s' if n &gt; 2 else ''}, predict the next one =====")
+        train_contexts, train_targets = make_windows(train_ids, n)
+        valid_contexts, valid_targets = make_windows(valid_ids, n)
+        test_contexts, test_targets = make_windows(test_ids, n)
+
+        start = time.perf_counter()
+        best = train_count_model(train_contexts, train_targets)
+        count_seconds = time.perf_counter() - start
+        count_train_accuracy, _ = count_accuracy(best, train_contexts[:200_000], train_targets[:200_000])
+        count_test_accuracy, found = count_accuracy(best, test_contexts, test_targets)
+        report(f"Count model: built in {count_seconds:.1f} s; {len(best[-1]):,} different {n - 1}-word contexts")
+        report(f"  train accuracy {count_train_accuracy:.2%} (first 200,000 windows), test accuracy {count_test_accuracy:.2%}")
+        report(f"  the full {n - 1}-word test context was seen in training {found:.1%} of the time; otherwise we used a shorter one")
+
+        report("Neural model:")
+        start = time.perf_counter()
+        model, losses = train_neural_model(train_contexts, train_targets, valid_contexts, valid_targets, len(vocab), n, report)
+        neural_seconds = time.perf_counter() - start
+        neural_test_accuracy, neural_test_loss = neural_evaluate(model, test_contexts, test_targets)
+        report(f"  trained in {neural_seconds:.1f} s; test accuracy {neural_test_accuracy:.2%}, test loss {neural_test_loss:.3f}")
+
+        results.append({
+            "n": n, "contexts": len(best[-1]), "countSeconds": round(count_seconds, 2), "neuralSeconds": round(neural_seconds, 2),
+            "countTrainAccuracy": count_train_accuracy, "countTestAccuracy": count_test_accuracy, "fullContextSeen": found,
+            "neuralTestAccuracy": neural_test_accuracy, "neuralTestLoss": neural_test_loss, "neuralTrainLosses": losses,
+        })
+
+        predictors = {
+            "count": lambda context: count_probabilities(train_contexts, train_targets, context, len(vocab), unk_id),
+            "neural": lambda context: neural_probabilities(model, context, unk_id),
+        }
+        for prompt in PROMPTS:
+            prompt_ids = [word_to_id.get(word, unk_id) for word in prompt.split()]
+            for model_name, predictor in predictors.items():
+                for method, rng in (("greedy", None), ("sampled", np.random.default_rng(SEED))):
+                    ids = generate(predictor, prompt_ids, n - 1, GENERATE_WORDS, rng)
+                    text = detokenize([vocab[i] for i in ids])
+                    samples.append({"n": n, "model": model_name, "method": method, "prompt": prompt, "text": text})
+                    if prompt == PROMPTS[0]:
+                        report(f"\n[{model_name}, {method}] {text}")
+
+    report("\n===== Summary: test accuracy =====")
+    report(f"{'n':&gt;3} {'count model':&gt;12} {'neural model':&gt;13}")
+    for row in results:
+        report(f"{row['n']:&gt;3} {row['countTestAccuracy']:&gt;12.2%} {row['neuralTestAccuracy']:&gt;13.2%}")
+
+    write_generated_text(samples, len(vocab))
+    report("\nAll generated paragraphs saved to", CHAPTER_DIR / "generated-text.md")
+
+    if args.export_web:
+        destination = CHAPTER_DIR.parents[1] / "docs" / "04-ngram-language-model" / "results.json"
+        destination.write_text(json.dumps({
+            "settings": {"vocabSize": len(vocab), "D": D, "epochs": EPOCHS, "batchSize": BATCH_SIZE,
+                         "learningRate": LEARNING_RATE, "seed": SEED, "generateWords": GENERATE_WORDS,
+                         "trainWords": int(len(train_ids)), "testWords": int(len(test_ids))},
+            "results": results, "samples": samples,
+        }, indent=1) + "\n", encoding="utf-8")
+        report("Web results written to", destination)
+    report("Output saved to", output_file)
+
+
+if __name__ == "__main__":
+    main()
+</pre>
+</body>
+</html>

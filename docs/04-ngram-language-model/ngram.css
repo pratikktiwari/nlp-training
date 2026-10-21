@@ -1,0 +1,59 @@
+/* Chapter 04 additions to intuition.css. Same tokens as theme.css. */
+.stream { display: flex; flex-wrap: wrap; gap: 6px; padding: 14px 0; font: 14px var(--f-mono); }
+.stream span { padding: 3px 8px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); }
+.stream .ctx { border-color: var(--center); background: color-mix(in oklab, var(--center) 14%, var(--surface)); color: var(--fg); }
+.stream .tgt { border-color: var(--target); background: color-mix(in oklab, var(--target) 16%, var(--surface)); color: var(--fg); font-weight: 600; }
+.stream .eos { color: var(--faint); }
+.example-line { font-size: 17px; }
+.c-ctx { color: var(--center); font-weight: 600; }
+.c-tgt { color: var(--target); font-weight: 600; }
+
+.backoff { display: flex; flex-direction: column; gap: 6px; margin: 12px 0; padding-left: 16px; border-left: 3px solid var(--line-strong); }
+.backoff p { margin: 0; }
+.count-bars { display: flex; flex-direction: column; gap: 8px; margin: 12px 0 18px; max-width: 560px; }
+.count-bar { display: grid; grid-template-columns: minmax(64px, 110px) minmax(0, 1fr) 118px; gap: 10px; align-items: center; font-size: 14px; }
+.count-bar .bar { height: 12px; background: var(--sunk); border-radius: 2px; }
+.count-bar .bar i { display: block; height: 100%; background: var(--muted); border-radius: 2px; }
+.count-bar.best .bar i { background: var(--target); }
+.count-bar.best .word { color: var(--target); font-weight: 600; }
+.count-bar .number { text-align: right; }
+
+.generated { margin: 16px 0; padding: 16px 20px; background: var(--surface); border: 1px solid var(--line); border-left: 3px solid var(--center); border-radius: 6px; font-size: 17px; line-height: 1.7; max-width: 78ch; overflow-wrap: anywhere; }
+.generated .prompt { color: var(--center); font-weight: 600; }
+.generated mark { background: var(--hl); color: var(--fg); box-shadow: inset 0 -2px 0 var(--hl-edge); }
+
+/* math & code page */
+.stage-layout { display: grid; grid-template-columns: minmax(0, .85fr) minmax(0, 1.15fr); gap: 22px; align-items: start; margin: 20px 0; }
+.source-panel { position: sticky; top: 12px; min-width: 0; }
+.source-panel .scroll { max-height: 600px; }
+.source-line { display: grid; grid-template-columns: 38px max-content; font: 12px/1.75 var(--f-mono); white-space: pre; padding: 0 10px 0 0; border: 0; border-left: 3px solid transparent; border-radius: 0; min-width: max-content; width: 100%; text-align: left; background: transparent; font-weight: 400; }
+.source-line .line-number { color: var(--faint); text-align: right; padding-right: 10px; user-select: none; }
+.source-line.active { background: var(--hl); border-left-color: var(--hl-edge); }
+.source-gap { font: 12px var(--f-mono); color: var(--faint); padding: 2px 0 2px 48px; }
+.phase-list { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0; }
+.phase-list button[aria-pressed="true"] { border-color: var(--center); background: var(--sunk); }
+.explanation { border-left: 3px solid var(--center); padding-left: 16px; margin-bottom: 20px; }
+.window-list { display: flex; flex-wrap: wrap; gap: 6px; max-height: 260px; overflow-y: auto; padding: 2px; }
+.window-list button { font: 12.5px var(--f-mono); padding: 4px 8px; font-weight: 400; }
+.window-list button[aria-selected="true"] { border-color: var(--target); background: color-mix(in oklab, var(--target) 14%, var(--surface)); }
+
+.mat { border-collapse: collapse; font: 12.5px var(--f-mono); font-variant-numeric: tabular-nums; width: auto; margin: 6px 0 16px; }
+.mat th, .mat td { padding: 3px 7px; border: 1px solid var(--line); text-align: right; white-space: nowrap; }
+.mat th { color: var(--muted); font-weight: 400; background: var(--sunk); text-align: center; }
+.mat td.hot { background: color-mix(in oklab, var(--target) 18%, var(--surface)); font-weight: 600; }
+.mat td.cool { background: color-mix(in oklab, var(--center) 14%, var(--surface)); }
+.mat caption { font: 600 13px var(--f-body); color: var(--fg); text-align: left; margin-bottom: 4px; }
+.calc { font: 13px/1.8 var(--f-mono); background: var(--sunk); padding: 10px 14px; border-radius: 4px; overflow-x: auto; white-space: pre; margin: 6px 0 16px; }
+.data-table { min-width: 460px; }
+.vocab-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 4px 14px; font: 13px var(--f-mono); }
+.vocab-grid span b { color: var(--muted); font-weight: 400; display: inline-block; min-width: 2.2em; }
+
+@media (max-width: 960px) {
+  .stage-layout { grid-template-columns: minmax(0, 1fr); }
+  .source-panel { position: static; }
+  .source-panel .scroll { max-height: 320px; }
+}
+@media (max-width: 480px) {
+  .count-bar { grid-template-columns: minmax(56px, 80px) minmax(0, 1fr) 96px; gap: 6px; }
+  .generated { font-size: 16px; padding: 12px 14px; }
+}

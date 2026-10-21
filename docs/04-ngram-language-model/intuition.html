@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>N-gram Language Model Intuition: Predicting the Next Word</title>
+<meta name="description" content="See how an n-gram model guesses the next word from the previous few words, why a bigger n helps and hurts, and why generated text repeats itself.">
+<script src="../theme.js"></script>
+<link rel="stylesheet" href="../theme.css">
+<link rel="stylesheet" href="../intuition.css">
+<link rel="stylesheet" href="ngram.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,600&family=Source+Sans+3:wght@400;600&family=JetBrains+Mono:wght@400&display=swap">
+<script src="ngram-engine.js" defer></script>
+<script src="ngram.js" defer></script>
+</head>
+<body data-view="intuition">
+<main class="wrap">
+  <div class="topbar"><a href="../">All chapters</a><nav aria-label="Chapter navigation"><a href="./">N-gram math &amp; code</a><a href="../03-glove/intuition.html">GloVe intuition</a><a href="#generate-heading">Generated text</a><button id="bTheme" class="theme-btn" type="button">Dark mode</button></nav></div>
+  <header>
+    <span class="kicker">Chapter 04 / N-gram language model intuition</span>
+    <h1>Guess the next word from the last few words</h1>
+    <p class="lede">Until now we learned word vectors. Now we use words to predict the next word, which is what a language model does.</p>
+    <p>The small examples on this page run in your browser on 10 short sentences. The results in sections 3 to 5 come from the Python script, trained on about 2 million words of Wikipedia.</p>
+  </header>
+  <p id="loadError" class="error" role="alert" hidden></p>
+  <noscript><p class="error">Enable JavaScript for the examples. The text still reads without it.</p></noscript>
+
+  <section aria-labelledby="task-heading">
+    <h2 id="task-heading">1. The task: read n − 1 words, guess word n</h2>
+    <div class="prose">
+      <p>An <b>n-gram</b> is just n words in a row. We slide a window of n words along the text. The first n − 1 words in the window are what the model gets to read, called the <b>context</b>. The last word is the answer it has to guess, called the <b>target</b>.</p>
+      <p>Each window becomes one training example. Moving the window one word to the right gives the next example.</p>
+    </div>
+    <div class="controls"><label>n <select id="windowN"><option value="2">2 (read 1 word)</option><option value="3" selected>3 (read 2 words)</option><option value="4">4 (read 3 words)</option></select></label><button id="windowNext" type="button">Move the window →</button></div>
+    <div id="windowStream" class="stream" aria-live="polite"></div>
+    <p id="windowExample" class="example-line"></p>
+    <p class="note"><code>&lt;eos&gt;</code> means “end of sentence”. We keep it as a word, so the model also learns where sentences stop, and a window can run from the end of one sentence into the next.</p>
+  </section>
+
+  <section aria-labelledby="count-heading">
+    <h2 id="count-heading">2. Count model: look up what came next before</h2>
+    <div class="prose">
+      <p>The simplest model just remembers. For a context such as <code>the cat</code>, it finds every place where <code>the cat</code> appears in the training text, and counts which word came right after it.</p>
+      <p>Dividing each count by the total turns the counts into probabilities. The guess is the word with the biggest count.</p>
+    </div>
+    <p class="formula"><code>P(next word | context) = (times the context was followed by that word) / (times the context appeared)</code></p>
+    <div class="controls"><label>First context word <select id="countA"></select></label><label>Second context word <select id="countB"></select></label></div>
+    <div id="countResult"></div>
+    <div class="prose">
+      <h3>What if the context never appeared?</h3>
+      <p>Then there is nothing to count, and every probability would be 0 / 0. Try <code>bird ran</code> above: no sentence has those two words in a row. The script then <b>backs off</b>: it drops the oldest word and looks up only <code>ran</code>. If even one word is unseen, it uses plain word counts, which always exist.</p>
+    </div>
+  </section>
+
+  <section aria-labelledby="bigger-heading">
+    <h2 id="bigger-heading">3. A bigger n: sharper guesses, but fewer matches</h2>
+    <div class="prose">
+      <p>After <code>the</code>, almost anything can follow. After <code>in the first season of the</code>, far fewer words fit. So more context should help.</p>
+      <p>The catch: a longer context is less likely to have appeared in the training text at all. Then the count model has to back off, and the extra context is wasted. The table shows this on Wikipedia text the model never trained on.</p>
+    </div>
+    <div class="scroll" tabindex="0" role="region" aria-label="Count model results for each n">
+      <table class="data-table"><caption>Count model, measured by the Python script</caption><thead><tr><th scope="col">n</th><th scope="col">Context words</th><th scope="col">Full context seen in training</th><th scope="col">Accuracy on training text</th><th scope="col">Accuracy on new text</th></tr></thead><tbody id="countRows"></tbody></table>
+    </div>
+    <p id="countReading" class="takeaway"></p>
+    <p class="note"><b>Accuracy</b> = correct guesses ÷ number of guesses. “New text” is the test set: articles that were not used for counting.</p>
+  </section>
+
+  <section aria-labelledby="neural-heading">
+    <h2 id="neural-heading">4. Neural model: let similar words share what they learned</h2>
+    <div class="prose">
+      <p>The count model treats every word as a separate symbol. Seeing <code>the cat sat</code> a hundred times teaches it nothing about <code>the dog sat</code>, because <code>dog</code> is a different key in its table.</p>
+      <p>The neural model replaces each word with an embedding, the same kind of learned vector as in chapter 01. Words used in similar places get similar vectors, so what is learned for <code>cat</code> also moves the guesses for <code>dog</code>. It also never meets an empty count: every context gives some scores.</p>
+    </div>
+    <div class="flow" aria-label="The neural model's steps"><span>the · cat</span><span>→ look up E[the], E[cat]</span><span>→ join into one list x</span><span>→ scores = x · W + b</span><span>→ softmax</span><span>→ a probability for every word</span></div>
+    <div class="prose">
+      <p>Training is the loop from chapter 01: compare the probabilities with the real next word using cross-entropy, compute the gradients, and step against them. Only the input changed: instead of one center word, we join n − 1 context words. The <a href="./">math &amp; code page</a> works through one update with every number.</p>
+    </div>
+    <div class="scroll" tabindex="0" role="region" aria-label="Count and neural accuracy for each n">
+      <table class="data-table"><caption>Accuracy on new text, both models</caption><thead><tr><th scope="col">n</th><th scope="col">Count model</th><th scope="col">Neural model</th><th scope="col">Neural training time</th></tr></thead><tbody id="compareRows"></tbody></table>
+    </div>
+    <p id="compareReading" class="note"></p>
+  </section>
+
+  <section aria-labelledby="generate-heading">
+    <h2 id="generate-heading">5. Generate text by feeding each guess back in</h2>
+    <div class="prose">
+      <p>To write text, we give a starting prompt, predict the next word, add it to the end, and slide the window forward. The new last n − 1 words are the next context. Repeat 60 times.</p>
+      <p><b>Greedy</b> always takes the most likely word. <b>Sampled</b> draws a word at random, where a word with probability 0.2 is picked 20% of the time.</p>
+    </div>
+    <div class="controls">
+      <label>n <select id="genN"></select></label>
+      <label>Model <select id="genModel"><option value="count">Count</option><option value="neural">Neural</option></select></label>
+      <label>Choice <select id="genMethod"><option value="greedy">Greedy</option><option value="sampled">Sampled</option></select></label>
+      <label>Prompt <select id="genPrompt"></select></label>
+    </div>
+    <blockquote id="genText" class="generated"></blockquote>
+    <p id="genRepeat" class="note"></p>
+    <div class="prose">
+      <h3>Why greedy text repeats forever</h3>
+      <p>The model only ever sees the last n − 1 words. In greedy mode the same context always gives the same next word. So once the last n − 1 words happen to match an earlier moment in the text, everything after that is an exact copy of what followed the first time, and it loops forever.</p>
+      <p>Sampling breaks the loop because the same context can give a different word. The price is that unlikely words get picked too, so the text drifts. Neither fixes the real limit: the model cannot look further back than n − 1 words, so it cannot keep to one topic. Later chapters remove that limit.</p>
+    </div>
+    <p class="takeaway">An n-gram model turns “predict the next word” into a lookup (count model) or into chapter 01's softmax with joined embeddings (neural model). More context helps until the context becomes too rare to learn from.</p>
+  </section>
+  <footer><p>Work through the <a href="./">n-gram math &amp; code page</a>, revisit <a href="../03-glove/intuition.html">GloVe intuition</a>, or go back to <a href="../">all chapters</a>.</p></footer>
+</main>
+</body>
+</html>

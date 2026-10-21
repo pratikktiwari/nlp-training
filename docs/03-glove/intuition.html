@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>GloVe Intuition: From Context Counts to Learned Vectors</title>
+<meta name="description" content="Understand why GloVe counts contexts, fits logarithms, learns biases, weights errors, and uses autograd and Adagrad to change its vectors.">
+<script src="../theme.js"></script>
+<link rel="stylesheet" href="../theme.css">
+<link rel="stylesheet" href="../intuition.css">
+<link rel="stylesheet" href="glove.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,600&family=Source+Sans+3:wght@400;600&family=JetBrains+Mono:wght@400&display=swap">
+<script src="../math-graphs.js" defer></script>
+<script>window.MathJax = { tex: { inlineMath: [['\\(', '\\)']], displayMath: [['\\[', '\\]']] }, svg: { fontCache: 'global' } };</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg.js" defer></script>
+<script src="glove.js" defer></script>
+</head>
+<body data-view="intuition">
+<main class="wrap">
+  <div class="topbar"><a href="../">All chapters</a><nav aria-label="Chapter navigation"><a href="./">GloVe math &amp; code</a><a href="../02-negative-sampling/intuition.html">Negative sampling intuition</a><a href="#experiment-heading">Training experiment</a><button id="bTheme" class="theme-btn" type="button">Dark mode</button></nav></div>
+  <header>
+    <span class="kicker">Chapter 03 / GloVe intuition</span>
+    <h1>Learn vectors by reconstructing context evidence</h1>
+    <p class="lede">Start with text, turn its repeated contexts into a table, and follow one cell through a prediction, a loss, and a real parameter update.</p>
+    <p>The default example is ice / water; a saved selection is restored if you have visited before. Read the reasoning in order, then use the controls to inspect other cells and checkpoints. The separate <a href="./">math &amp; code page</a> follows the exact PyTorch source.</p>
+    <p class="note">This uses the supplied ice, water, steam, cats, and dogs corpus. It is a different corpus and objective from the earlier chapters; their loss numbers are not directly comparable.</p>
+  </header>
+  <p id="loading" class="loading" role="status">Loading actual PyTorch checkpoints…</p><p id="loadError" class="error" role="alert" hidden></p><p id="storageNote" class="note" role="status" hidden></p>
+  <noscript><p class="error">Enable JavaScript for worked values and the recorded training experiment. The prose remains readable without it.</p></noscript>
+
+  <section aria-labelledby="count-heading">
+    <h2 id="count-heading">1. Collect the evidence before learning from it</h2>
+    <div class="prose">
+      <p>An embedding is a list of adjustable numbers representing a word. We still do not have a hand-written “correct vector” for ice. GloVe supplies feedback by asking those numbers to reconstruct how words occur near one another.</p>
+      <p>Instead of immediately updating on each token pair, first aggregate a <b>co-occurrence table</b> X over the whole corpus. “Global” refers to these aggregated corpus statistics, not to connecting every word with every other word or crossing sentence boundaries.</p>
+      <div class="sentences"><span>ice melts in water</span><span>ice and water are related</span></div>
+      <p>The context window is two positions. In the first sentence, ice and water are three positions apart, so that occurrence contributes nothing. In the second, they are two apart, so it adds \(\frac{1}{2} = 0.5\). Adjacent words add 1. Shorter distances provide stronger evidence under this chosen rule.</p>
+      <p>These are weighted counts, not probabilities. A value of 0.5 does not mean “a 50% chance.” If the same directed pair occurs again, we add another contribution to its cell rather than making a new unique cell.</p>
+    </div>
+    <div id="countContributions"></div>
+    <div class="prose">
+      <p>The reverse direction is counted separately. In this corpus the symmetric window makes X symmetric, but the model will still have separate target-role and context-role parameters.</p>
+      <p>A zero means this window found no occurrence. It is not proof that a pair is impossible, and GloVe does not turn it into a negative training example. Only the 80 nonzero directed cells are fitted.</p>
+    </div>
+    <details><summary>Actual corpus and run settings</summary><pre id="corpus" class="scroll"></pre><p id="recording" class="recording-note note"></p></details>
+  </section>
+
+  <section aria-labelledby="log-heading">
+    <h2 id="log-heading">2. Choose a count scale that preserves relative differences</h2>
+    <div class="prose">
+      <p>Raw counts can vary enormously in a large corpus. Fitting them directly would ask the dot product to span that same scale. GloVe instead asks the model to predict \(\log(X)\).</p>
+      <p>Log is the inverse of exponentiation with base \(e\), approximately 2.718. Since \(\exp(-0.693) \approx 0.5\), \(\log(0.5) \approx -0.693\). A negative log-count target is valid; it is not a negative probability.</p>
+      <p>The important property is \(\log(2X) - \log(X) = \log(2)\). Doubling a count produces the same target difference at any scale. For observed counts 0.5, 1, and 2, the targets are about -0.693, 0, and +0.693.</p>
+      <p>So the regression cares about multiplicative errors on the count scale. Predicting twice the observed count gives a residual of \(\log(2)\); predicting half gives \(-\log(2)\). Squaring those residuals treats these reciprocal mistakes alike.</p>
+    </div>
+    <div id="logExample"></div>
+    <p class="takeaway">We chose a regression target, not a probability transformation. The implementation does not explicitly calculate a table of probability ratios, apply softmax, or use sigmoid. Zero cells are omitted rather than sent through log.</p>
+  </section>
+
+  <section aria-labelledby="prediction-heading">
+    <h2 id="prediction-heading">3. Give the vectors and biases a prediction to produce</h2>
+    <div class="prose">
+      <p>The model receives both word IDs. That does not reveal the answer: the unknown here is the log co-occurrence count, not the identity of a context word. This is a different training question from chapter 01.</p>
+      <p>Each word has two vectors of 20 numbers: one for the target role and one for the context role. To score a cell, multiply corresponding coordinates and add the 20 products. This <b>dot product</b> makes the prediction depend on both words' learned values.</p>
+      <p>There are also two <b>biases</b>: one scalar for the target word and one for the context word. They shift a word's baseline across its row or column. Without biases, the vectors would have to represent these broad offsets as well as pair-specific patterns. The biases are learned, not assigned exact word-frequency formulas.</p>
+      <div class="formula">\[y_{ij}=\underbrace{w_i^\top u_j}_{\text{target and context vectors}}+\underbrace{b_i}_{\text{target bias}}+\underbrace{c_j}_{\text{context bias}}\]</div>
+      <p>The vectors start uniformly between -0.025 and +0.025; biases start at zero. A prediction near zero initially reconstructs a count near \(\exp(0) = 1\). It does not mean the model predicts no occurrence.</p>
+    </div>
+    <div id="predictionExample" class="prose"></div>
+    <p class="takeaway">The forward pass is lookup &rarr; dot product &rarr; add biases. Its output is unrestricted because log counts can be negative, zero, or positive. There is no hidden layer or probability normalization.</p>
+  </section>
+
+  <section aria-labelledby="loss-heading">
+    <h2 id="loss-heading">4. Define which predictions count as improvements</h2>
+    <div class="prose">
+      <p>Reveal the observed log-count target and subtract it from the prediction. This difference is the <b>residual</b>. A positive residual means overprediction; a negative one means underprediction.</p>
+      <p>We want a cost that is zero at the target and grows for mistakes on either side. Squaring supplies that smooth, two-sided cost. For example, predicting count 1 for observed count 0.5 gives log residual about +0.693, whose square is about 0.480.</p>
+      <h3>Distinguish the target's scale from the evidence's influence</h3>
+      <p>Taking log changed what we predict. A separate function \(f(X)\) controls how much we trust each observed cell in the objective. Rare counts provide weaker evidence, so at the same residual they receive a smaller multiplier. Frequent counts get more influence, capped at 1 rather than growing without limit.</p>
+      <div class="formula">\[f(X)=\begin{cases}(X/10)^{0.75}, &amp; X &lt; 10\\1, &amp; X \geq 10\end{cases}\]</div>
+      <p>This is a heuristic choice, not a probability or an attention mechanism. It is also different from the earlier \(1/\text{distance}\) contributions. One built the count; the other weights its error. Counts and \(f(X)\) are fixed data, not parameters updated by backpropagation.</p>
+    </div>
+    <div id="weightExample"></div><details><summary>Plot how counts change the confidence weight</summary><div id="weightGraph"></div></details>
+    <div class="prose">
+      <p>Without \(f(X)\), fitting log counts would still be regression, but low-count cells would have the same influence as stronger observations at equal residual. In this tiny corpus all counts are only 0.5, 1, or 2, so the upper cap at \(X = 10\) is never reached.</p>
+      <h3>Average the weighted costs over the actual batch</h3>
+      <p>For one cell the cost is \(f(X)\) times residual squared. The implementation takes the mean across all 80 unique observed cells. It does not normalize \(f(X)\) to sum to one, or average over the 441 possible matrix cells.</p>
+      <div class="formula">\[L=\frac{1}{80}\sum_{(i,j)\in\Omega}f(X_{ij})r_{ij}^{2},\qquad |\Omega|=80\]</div>
+    </div>
+    <div id="lossExample"></div><div id="errorGraph"></div>
+    <p class="takeaway">A lower objective means better weighted reconstruction of the observed log counts. It does not directly score word similarity or predict the quality of embeddings on new text.</p>
+  </section>
+
+  <fieldset id="lessonControls" class="lesson-controls" disabled>
+    <legend>Inspect a recorded example and parameter</legend>
+    <div class="controls">
+      <label>Target word <select id="target"></select></label><label>Observed context <select id="context"></select></label>
+      <label>Parameter <select id="parameter"><option value="target_bias.weight">Target bias</option><option value="context_bias.weight">Context bias</option><option value="target_embeddings.weight">Target vector coordinate</option><option value="context_embeddings.weight">Context vector coordinate</option></select></label>
+      <label>Coordinate <select id="coordinate"></select></label>
+    </div>
+    <p class="note">Worked values above and below follow this selection; the prose's ice / water example describes the default. Selecting a cell or parameter does not update the model; training always uses the full batch.</p>
+
+    <section aria-labelledby="gradient-heading">
+      <h2 id="gradient-heading">5. Connect the error to the parameters that caused it</h2>
+      <div class="prose">
+        <p>A loss tells us how costly the predictions are, not which weights to change. A <b>derivative</b> measures how a tiny change to one number affects loss with all other numbers fixed. The collection of parameter derivatives is the <b>gradient</b>.</p>
+        <p>First, inspect this relationship directly: slightly raise or lower just the selected parameter and recalculate the full objective. These probes illustrate sensitivity; the training algorithm uses autograd rather than trying each small perturbation.</p>
+      </div>
+      <p id="updateNote" class="recording-note note"></p><div id="sensitivityTable"></div><div id="sensitivityGraph"></div>
+      <div class="prose">
+        <p>If increasing a parameter raises loss, its derivative is positive and decreasing it is locally helpful. If increasing it lowers loss, its derivative is negative and increasing it is locally helpful. A finite or very large step can behave differently from that local prediction.</p>
+        <h3>Follow the feedback through the computation</h3>
+        <p>For one cell, differentiate its weighted squared residual and the batch mean:</p>
+        <div class="formula">\[\frac{\partial L}{\partial y_{ij}}=\frac{2f(X_{ij})r_{ij}}{80}\]</div>
+        <p>Adding a bias changes the prediction one-for-one, so that cell's contribution to the bias gradient is this same number. Changing one target coordinate changes the prediction by the matching context coordinate, so multiply by that coordinate. Context coordinates get the corresponding target multiplier.</p>
+        <p>A target word participates in several cells, so its vector and bias receive contributions from all of them. A single selected cell's gradient is not generally the full gradient passed to the optimizer.</p>
+      </div>
+      <div id="gradientExample"></div>
+      <div class="prose">
+        <p>PyTorch records the forward operations in a computation graph because the embedding and bias weights require gradients. <code>loss.backward()</code> carries sensitivities backward through those operations and adds contributions where parameters are reused.</p>
+        <p><code>optimizer.zero_grad()</code> first clears gradient fields left by the previous pass. Otherwise PyTorch would add this batch's derivatives to the previous batch's derivatives. Clearing these fields does not change weights and does not clear Adagrad's separate history.</p>
+      </div>
+    </section>
+
+    <section aria-labelledby="adagrad-heading">
+      <h2 id="adagrad-heading">6. Turn that gradient into an Adagrad update</h2>
+      <div class="prose">
+        <p>Autograd differentiates; it does not decide how to step. <b>Adagrad</b> is the optimizer used here. It keeps a separate running sum \(A\) of squared past gradients for every scalar weight and bias.</p>
+        <div class="formula">\[\begin{aligned}A_{\mathrm{new}} &amp;= A_{\mathrm{old}}+g^2\\\theta_{\mathrm{new}} &amp;= \theta_{\mathrm{old}}-\frac{0.03g}{\sqrt{A_{\mathrm{new}}}+10^{-10}}\end{aligned}\]</div>
+        <p>The minus sign moves against the gradient. The learning rate 0.03 sets the base scale. Dividing by the square root of accumulated squared gradients adapts each parameter's scale to its own history. Epsilon prevents division by zero and is added after the square root.</p>
+        <p>\(A\) starts at zero. On a first nonzero gradient, \(\sqrt{g^2}=|g|\), so the first step can be nearly 0.03 in magnitude even when \(g\) is tiny. This is why reading the raw gradient as the actual parameter change would be wrong.</p>
+      </div>
+      <div id="adagradExample"></div>
+      <p class="takeaway">This implementation computes one gradient from all 80 cells and calls step() once per epoch. It does not perform 80 sequential SGD updates, shuffle training pairs, use negative samples, or use Adam. Every step changes the shared model used by the next forward pass.</p>
+    </section>
+
+    <section aria-labelledby="experiment-heading">
+      <h2 id="experiment-heading">7. Repeat the full-batch loop and observe the fit</h2>
+      <div class="prose">
+        <p>An epoch here means one full-batch forward pass, one backward pass, and one Adagrad update. Checkpoint 0 is the initialized model. Checkpoint 20 is the model after 20 updates.</p>
+        <p>The loss curve evaluates the same 80-cell objective at each checkpoint. There is no fresh sampling noise. Changes come from changing parameters and, late in training, float32 rounding. A lower global mean does not require every cell to improve on every step.</p>
+      </div>
+      <div class="controls"><button id="start" type="button">Untrained</button><button id="previous" type="button">Previous update</button><button id="next" type="button">Next update</button><button id="play" class="primary" type="button" aria-pressed="false">Play training</button><button id="end" type="button">Show trained model</button></div>
+      <div class="progress"><label for="epoch">Completed updates</label><input id="epoch" type="range" min="0" max="300" value="0"><output id="epochReadout" for="epoch">0 / 300</output></div>
+      <p id="status" class="note"></p><div id="metrics" class="replay-metrics"></div>
+      <label class="controls"><input type="checkbox" id="logScale"> Use a logarithmic loss axis to inspect late changes</label>
+      <div class="duo">
+        <div class="panel"><h3>Whole objective</h3><div id="lossPlot" class="scroll plot" tabindex="0" role="region" aria-label="Scrollable recorded loss chart"></div><p id="lossCaption" class="note"></p></div>
+        <div class="panel"><h3>Selected cell's prediction</h3><div id="fitPlot" class="scroll plot" tabindex="0" role="region" aria-label="Scrollable count-fit chart"></div><p id="fitCaption" class="note"></p></div>
+      </div>
+      <div class="prose">
+        <p>On a linear scale this run appears to flatten quickly. A logarithmic vertical axis reveals continued reductions: equal vertical distances then represent equal ratios of loss, not equal absolute differences. Scientific notation preserves very small values instead of printing them as “0.000000.”</p>
+        <p>Near-zero loss means the observed constraints were fitted closely. A plateau can also reflect finite precision, parameterization, or optimizer step sizes; it is not proof of a globally best representation. Late values may rise slightly rather than decrease monotonically.</p>
+        <p>The controls replay actual PyTorch values, including gradients and accumulators. They do not retrain a JavaScript approximation or change hyperparameters. To experiment with window, dimension, weighting, or learning rate, run the Python script with changed constants; the chapter README explains the distinction between Python experiments and the default browser lesson.</p>
+      </div>
+    </section>
+  </fieldset>
+
+  <section aria-labelledby="embedding-heading">
+    <h2 id="embedding-heading">8. Separate a good count fit from useful word similarity</h2>
+    <div class="prose">
+      <p>The script adds a word's target and context vectors to form its final embedding. The two roles have both learned from context evidence; adding them is the chosen way to combine them for similarity queries. It is not part of the count-prediction equation.</p>
+    </div>
+    <details><summary>See how the selected word's combined vector is formed</summary><div id="combinedEmbedding"></div></details>
+    <div id="neighbors"></div>
+    <div class="prose">
+      <p>Cosine compares the directions of the combined vectors while discounting lengths. It is not the training loss. Predicting a count still uses the separate target and context vectors plus their biases, not the dot product of the combined embeddings.</p>
+      <p><b>The supplied toy run shows why the distinction matters.</b> It fits the observed counts almost perfectly, yet the final ice / water cosine is about -0.7507, while cats / dogs is about 0.7455. These are the actual results, not rankings adjusted to support a story.</p>
+      <p>There are 882 adjustable scalars but only 80 observed cell targets. Many different parameter settings can fit that small collection of constraints, and missing cells do not constrain the loss at all. A near-zero objective is therefore not evidence that this tiny corpus learned a dependable semantic map. A negative cosine is not a declaration that ice and water are unrelated.</p>
+    </div>
+    <p class="takeaway"><b>The full connection:</b> counts collect evidence, logarithms define a relative scale, vectors and biases reconstruct it, weighting chooses influence, derivatives connect errors to shared parameters, and Adagrad changes those parameters using history. The learned vectors are a reusable result of this task; their usefulness still needs evaluation.</p>
+  </section>
+  <footer><p><a href="./">GloVe math &amp; code walkthrough</a> · <a href="../02-negative-sampling/intuition.html">Previous intuition lesson</a> · <a href="../">All chapters</a></p></footer>
+</main>
+</body>
+</html>

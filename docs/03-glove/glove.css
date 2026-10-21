@@ -1,0 +1,44 @@
+.lesson-controls { border: 0; padding: 0; margin: 0; min-width: 0; }
+.lesson-controls legend { font-weight: 600; padding: 0; }
+.stage-layout { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); gap: 22px; align-items: start; margin: 24px 0; }
+.source-panel { position: sticky; top: 12px; min-width: 0; }
+.source-panel .scroll { max-height: 580px; }
+.source-line { display: grid; grid-template-columns: 42px max-content; font: 12px/1.8 var(--f-mono); white-space: pre; padding: 1px 10px 1px 0; border-left: 3px solid transparent; min-width: max-content; }
+button.source-line { border: 0; border-left: 3px solid transparent; border-radius: 0; width: 100%; text-align: left; padding-block: 1px; font-weight: 400; background: transparent; }
+.source-line .line-number { color: var(--faint); text-align: right; padding-right: 10px; user-select: none; }
+.source-line.active { background: var(--hl); border-left-color: var(--hl-edge); }
+.phase-list { display: flex; flex-wrap: wrap; gap: 8px; margin: 18px 0; }
+.phase-list button[aria-pressed="true"] { border-color: var(--center); background: var(--sunk); }
+.explanation { border-left: 3px solid var(--center); padding-left: 16px; margin-bottom: 22px; }
+.replay-metrics { display: flex; flex-wrap: wrap; gap: 14px 30px; margin: 20px 0; }
+.replay-metrics p { margin: 0; color: var(--muted); font-size: 14px; }
+.replay-metrics strong { display: block; color: var(--fg); font-size: 19px; font-family: var(--f-mono); }
+.cooccurrence { width: max-content; font: 12px var(--f-mono); }
+.cooccurrence th, .cooccurrence td { padding: 2px; text-align: center; }
+.cooccurrence .word-label { position: sticky; left: 0; background: var(--surface); text-align: left; padding-right: 8px; z-index: 1; }
+.cooccurrence thead th { writing-mode: vertical-rl; max-height: 110px; padding-bottom: 6px; }
+.cooccurrence button { min-width: 32px; padding: 4px 2px; border-color: var(--line); font: inherit; }
+.cooccurrence button.observed { background: color-mix(in oklab, var(--center) 15%, var(--surface)); }
+.cooccurrence button.selected { outline: 2px solid var(--target); outline-offset: -2px; }
+.code-equation { display: block; padding: 12px; margin: 12px 0; background: var(--sunk); overflow-wrap: anywhere; }
+.formula, .code-equation { min-width: 0; overflow-x: auto; }
+mjx-container { color: inherit; }
+mjx-container[display="true"] { text-align: left !important; }
+.data-table { min-width: 460px; }
+.recording-note { border-left: 3px solid var(--target); padding-left: 16px; }
+.compact-vectors { font: 12px/1.8 var(--f-mono); overflow-wrap: anywhere; }
+.derivative-graph { max-width: none; margin: 18px 0; }
+.derivative-graph svg text { fill: var(--muted); }
+.loading { padding: 12px 0; color: var(--muted); }
+.query { font-weight: 600; color: var(--target); }
+.wide-formula { max-width: 100%; }
+@media (max-width: 960px) {
+  .stage-layout { grid-template-columns: minmax(0, 1fr); }
+  .source-panel { position: static; }
+  .source-panel .scroll { max-height: 300px; }
+}
+@media (max-width: 480px) {
+  .source-line { font-size: 11px; }
+  .replay-metrics { gap: 12px 18px; }
+  .replay-metrics strong { font-size: 16px; }
+}

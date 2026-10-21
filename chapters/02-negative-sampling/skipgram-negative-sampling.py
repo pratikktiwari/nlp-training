@@ -1,5 +1,6 @@
 from pprint import pprint
 from pathlib import Path
+import time
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.text import Text
@@ -208,6 +209,9 @@ losses = []
 
 # ----- Training loop -----
 
+# start the stopwatch: perf_counter is Python's most precise clock for timing code
+training_start = time.perf_counter()
+
 for epoch in range(EPOCHS):
     np.random.shuffle(pairs)
     total_loss = 0
@@ -259,6 +263,11 @@ for epoch in range(EPOCHS):
     losses.append(total_loss / len(pairs))
     print(f"End of epoch {epoch + 1}, Average Loss: {total_loss / len(pairs):.4f}")
     append_output(f"End of epoch {epoch + 1}, Average Loss: {total_loss / len(pairs):.4f}")
+
+training_seconds = time.perf_counter() - training_start
+print(f"\nTraining took {training_seconds:.2f} seconds ({EPOCHS} epochs, {len(pairs)} pairs, K = {K})")
+append_output(f"\nTraining took {training_seconds:.2f} seconds ({EPOCHS} epochs, {len(pairs)} pairs, K = {K})")
+print("To compare with full softmax on bigger vocabularies, run speed-comparison.py")
 
 # 7. Print learned embeddings
 print("\nLearned word embeddings:")

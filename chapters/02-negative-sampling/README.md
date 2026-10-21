@@ -7,6 +7,7 @@ Read [chapter 01](../01-word2vec-skipgram/README.md) first. You should know what
 **Use this chapter in order:** compare the two training tasks, follow one yes/no update, then read how the script repeats it. The longer calculus derivation is optional.
 
 - [Code](skipgram-negative-sampling.py)
+- [Speed comparison with full softmax](speed-comparison.py)
 - [Negative sampling intuition: data, noise, and learning](https://pratikktiwari.github.io/text-nn-from-scratch/02-negative-sampling/intuition.html) ([page source](../../docs/02-negative-sampling/intuition.html))
 - [Interactive walkthrough](https://pratikktiwari.github.io/text-nn-from-scratch/02-negative-sampling/) ([page source](../../docs/02-negative-sampling/index.html))
 - [Previous chapter: full-softmax skip-gram](../01-word2vec-skipgram/README.md)
@@ -62,7 +63,7 @@ The negatives discourage giving high scores to everything. Together, these signa
 
 The dot products and weight updates cost roughly `O(V * D)` for full softmax versus `O((K + 1) * D)` for negative sampling, where `D` is embedding size.
 
-This compares **scoring and updating**, not measured runtime. The teaching script uses `np.random.choice` with a vocabulary-sized probability array and rejection sampling. Sampling has its own cost; the whole script is not guaranteed to take constant time as `V` grows.
+This compares **scoring and updating**, not measured runtime. The teaching script uses `np.random.choice` with a vocabulary-sized probability array and rejection sampling. Sampling has its own cost; the whole script is not guaranteed to take constant time as `V` grows. [Time it](#time-it) below measures this.
 
 ## Math
 
@@ -265,6 +266,36 @@ The script prints the data, initial weights, sampling probabilities, epoch losse
 
 Each run also writes a new `skipgram-negative-sampling.output_N.txt` beside the script. These logs are gitignored; no existing log is overwritten.
 
+### Time it
+
+The script now prints how long training took, measured with `time.perf_counter()` around the training loop. With 21 words that is well under a second. At this size there is nothing to save: scoring 21 words is cheap, and negative sampling does 4 small updates per pair instead of 1.
+
+To see the difference, run the speed comparison. It makes up bigger corpora with the same sentence shape (`thing describing-word group`), and trains chapter 01's loop and this chapter's loop on the same 2,000 pairs:
+
+```bash
+python chapters/02-negative-sampling/speed-comparison.py
+```
+
+One run on a 4-core machine (seconds for the same 2,000 pairs; your numbers will differ, the pattern should not):
+
+| Vocabulary | Full softmax (chapter 01) | Negative sampling, `np.random.choice` (chapter 02) | Negative sampling, table draw |
+|---|---|---|---|
+| 21 | 0.026 | 0.174 | 0.092 |
+| 994 | 0.045 | 0.180 | 0.066 |
+| 9,996 | 0.180 | 0.660 | 0.105 |
+| 49,994 | 1.364 | 2.336 | 0.067 |
+
+The vocabularies are not round numbers because each made-up group has exactly 7 words.
+
+What this shows:
+
+- **Full softmax slows down as the vocabulary grows.** Every pair computes `V` scores and changes all `V` columns of `W`: about 50 times slower at 50,000 words than at 21.
+- **For small vocabularies full softmax wins.** At 21 words it is the fastest of the three, because one NumPy call over 21 numbers is cheaper than 4 separate small updates.
+- **This chapter's sampler is slower still.** `np.random.choice(vocab_length, p=negative_probabilities)` re-reads all `V` probabilities on every single draw, and each call has a fixed start-up cost. So in this script, negative sampling is not faster than full softmax at any size.
+- **Drawing from a table fixes it.** The original word2vec code fills a big table once, where each word takes a share of the slots equal to its sampling probability. A draw is then "pick a random slot", which costs the same for 21 or 50,000 words. With that, the training time stays flat as `V` grows: at 50,000 words it is about 20 times faster than full softmax. This is the speed-up negative sampling promises.
+
+We keep `np.random.choice` in the main script because the interactive walkthrough replays its exact random draws.
+
 ## What to notice
 
 - **Loss can move slowly at first.** Small initial vectors give scores near zero. Use the 50-epoch run to examine the learned structure rather than judging it after five epochs.
@@ -290,6 +321,4 @@ Change one thing at a time:
 
 ## What's next
 
-So far, we have learned representations by using words on either side of a center word. We have not trained a model specifically to predict the next word.
-
-The planned next chapter is a **bigram language model**: given one word, predict the next one, then sample repeatedly to generate text. That task brings back a vocabulary-wide probability distribution like the softmax in chapter 01.
+In [chapter 03: GloVe](../03-glove/README.md), aggregate context evidence into co-occurrence counts, then fit their logarithms with vectors and biases. It introduces PyTorch autograd and Adagrad, using a different corpus and a regression objective rather than data-versus-noise classification.

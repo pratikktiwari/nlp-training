@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>GloVe: Math and PyTorch Code, Step by Step</title>
+<meta name="description" content="Replay an actual PyTorch GloVe run: weighted co-occurrences, log-count regression, biases, autograd, and Adagrad.">
+<script src="../theme.js"></script>
+<link rel="stylesheet" href="../theme.css">
+<link rel="stylesheet" href="../intuition.css">
+<link rel="stylesheet" href="glove.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,600&family=Source+Sans+3:wght@400;600&family=JetBrains+Mono:wght@400&display=swap">
+<script src="../math-graphs.js" defer></script>
+<script>window.MathJax = { tex: { inlineMath: [['\\(', '\\)']], displayMath: [['\\[', '\\]']] }, svg: { fontCache: 'global' } };</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg.js" defer></script>
+<script src="glove.js" defer></script>
+</head>
+<body data-view="math">
+<main class="wrap">
+  <div class="topbar"><a href="../">All chapters</a>
+    <nav aria-label="Chapter navigation"><a href="intuition.html">GloVe intuition</a><a href="../02-negative-sampling/">Chapter 02</a><a href="#s-step">Training replay</a><a href="#s-math">Derivation</a><button id="bTheme" class="theme-btn" type="button">Dark mode</button></nav>
+  </div>
+  <header>
+    <span class="kicker">Chapter 03 / GloVe / Math &amp; code</span>
+    <h1>Fit global co-occurrence evidence with word vectors</h1>
+    <p class="lede">Predict log co-occurrence counts, measure weighted squared error, and follow PyTorch's full-batch gradients into an Adagrad update.</p>
+    <p>Start with <a href="intuition.html">the separate intuition lesson</a> for the reasoning. Here, pick an observed cell and inspect its actual calculations alongside the Python source. Selecting a cell does not turn this full-batch algorithm into single-pair SGD.</p>
+    <p class="note">Log means base e. This chapter uses the supplied ice, water, steam, cats, and dogs corpus, not the earlier pets/fruit/vehicles corpus. Its loss values are not directly comparable with either Word2Vec objective.</p>
+  </header>
+  <p id="loading" class="loading" role="status">Loading the recorded PyTorch run…</p>
+  <p id="loadError" class="error" role="alert" hidden></p>
+  <p id="storageNote" class="note" role="status" hidden></p>
+  <noscript><p class="error">Enable JavaScript for the recorded training replay. The derivation below and chapter README are still readable.</p></noscript>
+
+  <section id="s-setup" aria-labelledby="data-heading">
+    <h2 id="data-heading">1. Count the context evidence once</h2>
+    <p class="prose">A window of two stays inside each sentence. An occurrence one position away adds 1; two positions away adds 0.5. Aggregate these contributions into X. The batch contains 80 unique nonzero directed cells, not a list that repeats each token occurrence.</p>
+    <details><summary>Sentences and co-occurrence matrix</summary>
+      <pre id="corpus" class="scroll"></pre>
+      <p class="note">Rows are target words; columns are contexts. Select a nonzero cell to inspect it. Selecting zero explains why that cell is not trained.</p>
+      <div id="matrix" class="scroll" tabindex="0" role="region" aria-label="Scrollable co-occurrence matrix"></div>
+      <p id="matrixNote" class="note" role="status">Zero means unobserved under this window, not a sampled negative.</p>
+    </details>
+    <p id="recording" class="recording-note note"></p>
+  </section>
+
+  <section id="s-step" aria-labelledby="replay-heading">
+    <h2 id="replay-heading">2. Follow one full-batch optimizer update</h2>
+    <p class="prose">A checkpoint contains the weights after the displayed number of updates. Forward calculations use that checkpoint. Backward and Adagrad panels inspect its next update; at checkpoint 300 they explicitly review the final recorded transition. Counts, log targets, and confidence weights are prepared once and reused.</p>
+    <fieldset id="lessonControls" class="lesson-controls" disabled>
+      <legend>Inspect the recorded run</legend>
+      <div class="controls">
+        <label>Target word <select id="target"></select></label><label>Observed context <select id="context"></select></label>
+        <label>Parameter <select id="parameter"><option value="target_bias.weight">Target bias</option><option value="context_bias.weight">Context bias</option><option value="target_embeddings.weight">Target vector coordinate</option><option value="context_embeddings.weight">Context vector coordinate</option></select></label>
+        <label>Coordinate <select id="coordinate"></select></label>
+      </div>
+      <div class="controls"><button id="start" type="button">Untrained</button><button id="previous" type="button">Previous step</button><button id="next" type="button">Next step</button><button id="nextEpoch" type="button">Next optimizer update</button><button id="play" type="button" class="primary" aria-pressed="false">Play steps</button><button id="end" type="button">Show trained model</button></div>
+      <div class="progress"><label for="epoch">Completed updates</label><input id="epoch" type="range" min="0" max="300" value="0"><output id="epochReadout" for="epoch">0 / 300</output></div>
+      <div id="phases" class="phase-list" aria-label="Operations to inspect"></div>
+    </fieldset>
+    <p id="status" class="note"></p>
+    <p class="note">When focus is outside a control: Left/Right moves through steps; Space plays or pauses. Use the slider for longer-range comparisons. Theme and position persist across navigation.</p>
+    <div id="metrics" class="replay-metrics"></div>
+    <div class="stage-layout">
+      <div class="panel source-panel"><h3>glove.py — the recorded run's exact source</h3>
+        <p class="note">Highlighted operations are clickable. Helper functions keep data export separate from the learning algorithm.</p>
+        <div id="codeSource" class="scroll" tabindex="0" role="region" aria-label="Scrollable Python source"></div>
+      </div>
+      <div class="panel">
+        <h3 id="phaseTitle">Select a training operation</h3>
+        <p id="whyStep" class="explanation"></p>
+        <div id="workedStep"></div><div id="stepGraph"></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="s-math" aria-labelledby="math-heading">
+    <h2 id="math-heading">3. Connect the objective to the gradients</h2>
+    <div class="prose">
+      <h3>Define a prediction for an observed count</h3>
+      <p>Let \(w_i\) be the target embedding, \(u_j\) the context embedding, \(b_i\) the target bias, and \(c_j\) the context bias. Both embedding tables are \(V \times D\); both bias tables are \(V \times 1\). They are distinct even though this corpus produces a symmetric count matrix.</p>
+      <div class="formula">\[\begin{aligned}y_{ij} &amp;= w_i^\top u_j + b_i + c_j\\t_{ij} &amp;= \log(X_{ij})\\r_{ij} &amp;= y_{ij} - t_{ij}\end{aligned}\]</div>
+      <p>The prediction is a real-valued log count. \(\exp(y_{ij})\) maps it back to a count scale, but not to a normalized probability. Biases are learned offsets; they are not hard-coded word-frequency logarithms.</p>
+      <h3>Weight the squared residual, then average the batch</h3>
+      <p>The set \(\Omega\) contains only cells with \(X_{ij} &gt; 0\). Here \(M = |\Omega| = 80\). A zero cell has no log target; it is not assigned a zero regression target.</p>
+      <div class="formula">\[f(X)=\begin{cases}(X/10)^{0.75}, &amp; X &lt; 10\\1, &amp; X \geq 10\end{cases}\]\[L=\frac{1}{M}\sum_{(i,j)\in\Omega} f(X_{ij})r_{ij}^{2}\]</div>
+      <p>The mean differs from the original paper's commonly written sum by a constant factor. All derivatives below include \(1/M\) because this implementation calls <code>.mean()</code>. Its \(f(X)\) is fixed data, not a trainable parameter.</p>
+      <h3>Start backward with sensitivity to one prediction</h3>
+      <p>The derivative of \(r^2\) is \(2r\), and \(r\) changes one-for-one with \(y\). Define \(a_{ij}\) as this cell's contribution to the mean loss's prediction gradient:</p>
+      <div class="formula">\[a_{ij}=\frac{\partial L}{\partial y_{ij}}=\frac{2f(X_{ij})r_{ij}}{M}\]</div>
+      <p>If prediction exceeds target, \(r\) is positive and lowering \(y\) is locally helpful. If prediction is too small, \(r\) is negative and raising \(y\) is locally helpful. The output is not passed through a sigmoid; this is squared-error regression, not binary classification.</p>
+      <h3>Sum contributions wherever a parameter is shared</h3>
+      <p>A target vector is reused by every observed cell in its row. A context vector is reused by every observed cell in its column. Each gets the sum of the corresponding chain-rule contributions:</p>
+      <div class="formula">\[\begin{aligned}\frac{\partial L}{\partial w_i} &amp;= \sum_{j:(i,j)\in\Omega} a_{ij}u_j\\\frac{\partial L}{\partial u_j} &amp;= \sum_{i:(i,j)\in\Omega} a_{ij}w_i\\\frac{\partial L}{\partial b_i} &amp;= \sum_{j:(i,j)\in\Omega} a_{ij}\\\frac{\partial L}{\partial c_j} &amp;= \sum_{i:(i,j)\in\Omega} a_{ij}\end{aligned}\]</div>
+      <p><code>loss.backward()</code> obtains these gradients by following the graph of PyTorch tensor operations. <code>optimizer.zero_grad()</code> removes gradients left from a prior pass. Neither operation changes the model weights or resets Adagrad's accumulator.</p>
+      <h3>Apply Adagrad, not plain gradient descent</h3>
+      <p>For each scalar parameter \(\theta\), the optimizer has its own squared-gradient history \(A\). With this run's defaults:</p>
+      <div class="formula">\[\begin{aligned}A_{\mathrm{new}} &amp;= A_{\mathrm{old}} + g^2\\\theta_{\mathrm{new}} &amp;= \theta_{\mathrm{old}}-\frac{0.03g}{\sqrt{A_{\mathrm{new}}}+10^{-10}}\end{aligned}\]</div>
+      <p>\(A\) starts at zero; epsilon is added after the square root. Weight decay and learning-rate decay are zero. A first nonzero gradient can therefore produce a step near 0.03 regardless of its magnitude; later steps depend on that parameter's accumulated history. This is not Adam, and there is no moving-average decay.</p>
+    </div>
+  </section>
+
+  <section id="s-run" aria-labelledby="run-heading">
+    <h2 id="run-heading">4. Compare the global objective with one fitted cell</h2>
+    <label class="controls"><input type="checkbox" id="logScale"> Use a logarithmic vertical axis for loss</label>
+    <div class="duo">
+      <div class="panel"><h3>Full-batch objective</h3><div id="lossPlot" class="scroll plot" tabindex="0" role="region" aria-label="Scrollable recorded loss chart"></div><p id="lossCaption" class="note"></p></div>
+      <div class="panel"><h3>Selected cell's log-count fit</h3><div id="fitPlot" class="scroll plot" tabindex="0" role="region" aria-label="Scrollable prediction-versus-target chart"></div><p id="fitCaption" class="note"></p></div>
+    </div>
+    <p class="prose">The small corpus is easy to overfit: there are 882 scalar parameters but only 80 observed regression targets. A near-zero objective means the observed log counts were fitted; it does not establish useful predictions for missing cells or meaningful cosine neighbours. Late float32 changes need not decrease loss at every update.</p>
+  </section>
+
+  <section id="s-embeddings" aria-labelledby="embedding-heading">
+    <h2 id="embedding-heading">5. Inspect the result without changing its meaning</h2>
+    <p class="prose">The script uses \(e_i = w_i + u_i\) for its final representation. The table below compares those combined embeddings for the selected target word at the current checkpoint. The model's count prediction still uses the two roles separately plus both biases.</p>
+    <div id="neighbors"></div>
+    <p class="takeaway">Co-occurrence counts define the evidence; log counts define the regression targets; \(f(X)\) controls influence; autograd measures shared-parameter sensitivities; Adagrad changes parameters using accumulated history. Similarity is a separate use of the resulting vectors, not the quantity optimized by the loss.</p>
+  </section>
+  <footer><p><a href="intuition.html">GloVe intuition</a> · <a href="../02-negative-sampling/">Previous chapter</a> · <a href="../">All chapters</a></p></footer>
+</main>
+</body>
+</html>

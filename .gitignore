@@ -7,3 +7,5 @@ __pycache__/
 # run logs and plots
 outputs/
 *.output_*.txt
+*.mp4
+
