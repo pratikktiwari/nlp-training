@@ -8,6 +8,7 @@
 <meta name="claude:viewport-fit-sides" content="cover">
 <meta name="description" content="Watch a skip-gram Word2Vec model train in the browser, one update at a time, with every number worked out.">
 <script src="../theme.js"></script>
+<script src="../python-syntax.js"></script>
 <link rel="stylesheet" href="../theme.css">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -659,7 +660,7 @@ function codeLines(){
   return L.map(([t,ph,cls,raw],i)=>[i+1,t,ph,cls||'',raw]);
 }
 function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;')}
-function drawCode(){$('src').innerHTML=codeLines().map(([n,t,ph,cls,raw])=>`<div class="ln ${cls||''}" data-ph="${ph||''}"><span class="n">${n??'…'}</span><span class="t">${raw?t:esc(t)}</span></div>`).join('')}
+function drawCode(){$('src').innerHTML=codeLines().map(([n,t,ph,cls,raw])=>`<div class="ln ${cls||''}" data-ph="${ph||''}"><span class="n">${n??'…'}</span><span class="t">${raw?PythonSyntax.highlightMarkup(t):PythonSyntax.highlight(t)}</span></div>`).join('');PythonSyntax.attachControls($('src'))}
 
 const PH_ORDER=["shuffle","pair","h","scores","softmax","loss","error","gW","gh","uW","uE","end"];
 const PH_LABEL={shuffle:"shuffle",pair:"pick pair",h:"lookup h",scores:"scores",softmax:"softmax",loss:"loss",error:"error",gW:"∂W",gh:"∂h",uW:"update W",uE:"update E",end:"epoch end"};

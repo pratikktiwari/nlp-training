@@ -472,10 +472,11 @@ if (typeof document !== 'undefined') {
       $('phases').onclick = event => { const button = event.target.closest('[data-phase]'); if (button) { stop(); state.phase = button.dataset.phase; render(); } };
       const linePhases = new Map();
       for (const [phase, lines] of Object.entries(m.phaseLines)) for (const line of lines) linePhases.set(line, phase);
-      $('codeSource').innerHTML = m.source.split('\n').map((text, index) => {
+      $('codeSource').innerHTML = PythonSyntax.highlightLines(m.source).map((text, index) => {
         const phase = linePhases.get(index + 1);
-        return `<${phase ? 'button type="button"' : 'div'} class="source-line" data-line="${index+1}"${phase ? ` data-phase="${phase}" title="Inspect ${phase}"` : ''}><span class="line-number">${index+1}</span><span>${esc(text)}</span></${phase ? 'button' : 'div'}>`;
+        return `<${phase ? 'button type="button"' : 'div'} class="source-line" data-line="${index+1}"${phase ? ` data-phase="${phase}" title="Inspect ${phase}"` : ''}><span class="line-number">${index+1}</span><span>${text}</span></${phase ? 'button' : 'div'}>`;
       }).join('');
+      PythonSyntax.attachControls($('codeSource'));
       $('codeSource').onclick = event => { const line = event.target.closest('[data-phase]'); if (line) { stop(); state.phase = line.dataset.phase; render(); } };
       $('matrix').onclick = event => {
         const button = event.target.closest('[data-cell]');

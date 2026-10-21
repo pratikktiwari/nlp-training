@@ -185,6 +185,7 @@
 
     // show only the functions the update runs, with their real line numbers
     const source = $('pySource').textContent.replace(/^\n/, '').split('\n');
+    const highlighted = PythonSyntax.highlightLines(source.join('\n'));
     const wanted = ['def forward(', 'def softmax(', 'def train_step('];
     const blocks = wanted.map(start => {
       const from = source.findIndex(line => line.startsWith(start));
@@ -194,7 +195,8 @@
       return { from, to };
     }).filter(b => b.from >= 0);
     $('codeSource').innerHTML = blocks.map(({ from, to }) => source.slice(from, to).map((line, k) =>
-      `<button type="button" class="source-line" data-line="${from + k}"><span class="line-number">${from + k + 1}</span><span>${esc(line) || ' '}</span></button>`).join('')).join('<div class="source-gap">⋮</div>');
+      `<button type="button" class="source-line" data-line="${from + k}"><span class="line-number">${from + k + 1}</span><span>${highlighted[from + k] || ' '}</span></button>`).join('')).join('<div class="source-gap">⋮</div>');
+    PythonSyntax.attachControls($('codeSource'));
     $('codeSource').addEventListener('click', event => {
       const button = event.target.closest('.source-line');
       if (!button) return;

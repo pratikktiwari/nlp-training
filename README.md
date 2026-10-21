@@ -26,6 +26,15 @@ Change one setting at a time and predict what it should affect before rerunning.
 
 The site defaults to light mode. The theme switch on the homepage and each learning page remembers an explicit choice across navigation and reloads. Mathematical `log` notation means base e, matching NumPy and PyTorch. In the derivations, synchronized curves show the current value and a dashed tangent: its slope explains the sign and size of the error or gradient without changing the training run.
 
+All four chapter walkthroughs use a shared, local Python syntax highlighter
+for keywords, strings, numbers, calls, and comments. Colors follow the light
+or dark theme while preserving clickable lines, active-step backgrounds,
+and live hyperparameter markers. Highlighting needs no external service;
+formulas, corpus text, and numerical tables keep their existing formatting.
+The icons at the top right of each listing copy its displayed code without
+line numbers or expand it into a full-screen overlay. Escape or the close
+icon returns to the lesson; syntax colors and clickable lines stay active.
+
 ## Roadmap
 
 | # | Chapter | What it adds | Status |
